@@ -23,7 +23,7 @@ Add to `.grok-plugin/marketplace.json` → `plugins` array (pin **full** SHA):
   "source": {
     "source": "url",
     "url": "https://github.com/HaoZeke/nimvault-mcp.git",
-    "sha": "dd6ca6939bed99ee9679f4146c82426a642913f9"
+    "sha": "eca93a6aecfcd6527e7c2dedbf9acac036db30e8"
   },
   "homepage": "https://github.com/HaoZeke/nimvault-mcp",
   "keywords": ["nimvault", "nimvault mcp", "opaque-blob", "gpg vault"],
