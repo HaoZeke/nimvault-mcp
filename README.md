@@ -103,6 +103,8 @@ Pass **`repo_path`** (git root with `.vault/`), or set **`NIMVAULT_DEFAULT_REPO`
 | `NIMVAULT_DEFAULT_REPO` | Default `repo_path` when omitted |
 | `NIMVAULT_MCP_ALLOW_MUTATE` | `1` / `true` enables mutating tools (default **off**) |
 | `NIMVAULT_GPG_PARALLEL` | CLI seal/unseal concurrency (default 8) |
+| `NIMVAULT_MCP_READ_ONLY` | Hard-disable all mutate tools |
+| `NIMVAULT_MCP_AUDIT_LOG` | Append-only audit file (metadata only) |
 
 ## Performance
 

@@ -103,7 +103,15 @@ pub fn format_doctor_report(cli_ok: bool, cli_detail: &str, gpg_hint: &str) -> S
         lines.push(gpg_hint.into());
     }
     lines.push(String::new());
-    lines.push("Next: nimvault_list / nimvault_status with repo_path=…/checkout/with/.vault".into());
+    if let Some(a) = crate::constants::audit_log_path() {
+        lines.push(format!("audit log: {a}"));
+    }
+    if crate::constants::read_only_locked() {
+        lines.push("READ_ONLY lock active (NIMVAULT_MCP_READ_ONLY)".into());
+    }
+    lines.push("Never returns vaulted file contents to the model (metadata/status only).".into());
+    lines.push("Survey: docs/SURVEY.md — niche vs Vault/1Password/sops.".into());
+    lines.push("Next: nimvault_list / nimvault_status (repo_path optional if .vault walk-up or DEFAULT_REPO).".into());
     lines.join("\n")
 }
 

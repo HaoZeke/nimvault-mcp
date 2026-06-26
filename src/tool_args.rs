@@ -8,23 +8,33 @@ fn default_repo() -> Option<String> {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct RepoArgs {
-    /// Git repository root that contains `.vault/` (nimvault is CWD-sensitive). Defaults to server CWD.
+    /// Git repository root that contains `.vault/`. Optional if NIMVAULT_DEFAULT_REPO is set or CWD walks up to a `.vault`.
     #[serde(default = "default_repo")]
     pub repo_path: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct PathRepoArgs {
-    /// File path to add/remove (absolute or as accepted by nimvault CLI).
+    /// File path (absolute or as accepted by nimvault CLI).
     pub path: String,
     #[serde(default = "default_repo")]
     pub repo_path: Option<String>,
-    /// Optional GPG recipient (overrides `.vault/config` / NIMVAULT_GPG_RECIPIENT).
     #[serde(default)]
     pub recipient: Option<String>,
-    /// If true, do not auto-append the path to `.gitignore` on add.
     #[serde(default)]
     pub no_gitignore: Option<bool>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MoveArgs {
+    /// Current target path of the vault entry.
+    pub old_path: String,
+    /// New target path.
+    pub new_path: String,
+    #[serde(default = "default_repo")]
+    pub repo_path: Option<String>,
+    #[serde(default)]
+    pub recipient: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -39,7 +49,6 @@ pub struct SealArgs {
 pub struct UnsealArgs {
     #[serde(default = "default_repo")]
     pub repo_path: Option<String>,
-    /// Allow legacy unsigned vault blobs (fail-open migration).
     #[serde(default)]
     pub allow_unsigned: Option<bool>,
     #[serde(default)]
@@ -48,7 +57,6 @@ pub struct UnsealArgs {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct ScanArgs {
-    /// Directory to scan for unvaulted secrets (defaults to repo_path or CWD).
     #[serde(default)]
     pub path: Option<String>,
     #[serde(default = "default_repo")]

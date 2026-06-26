@@ -8,11 +8,12 @@ use rmcp::{
 };
 
 use crate::cli::run_nimvault;
-use crate::constants::{default_recipient_env, mutate_enabled};
+use crate::constants::{default_recipient_env, mutate_enabled, read_only_locked};
 use crate::doctor::{format_doctor_report, install_help_block, server_instructions};
 use crate::tool_args::*;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Server {
     tool_router: ToolRouter<Self>,
 }
@@ -27,7 +28,18 @@ fn trunc(s: &str, max: usize) -> String {
 }
 
 fn blocked_mutate() -> String {
-    "BLOCKED: set NIMVAULT_MCP_ALLOW_MUTATE=1 in the MCP server env (Grok plugin / Claude mcpServers / Codex mcp_servers) to enable add/remove/seal/unseal (writes `.vault/` and may decrypt secrets). list/status/scan remain available. Call nimvault_doctor for a full checklist.".into()
+    if read_only_locked() {
+        return "BLOCKED: NIMVAULT_MCP_READ_ONLY=1 — all mutating tools disabled (hard lock). list/status/scan/doctor only. Call nimvault_doctor.".into();
+    }
+    "BLOCKED: set NIMVAULT_MCP_ALLOW_MUTATE=1 in MCP env to enable add/remove/mv/seal/unseal (writes `.vault/`; never returns secret file bodies). list/status/scan remain available. Call nimvault_doctor. See docs/SURVEY.md for threat model niche.".into()
+}
+
+fn err_help(e: String) -> String {
+    let mut msg = format!("ERROR: {e}");
+    if msg.contains("not found") || msg.contains("NIMVAULT_BIN") || msg.contains("No repo_path") {
+        msg.push_str(&install_help_block());
+    }
+    msg
 }
 
 fn push_recipient(args: &mut Vec<String>, recipient: &Option<String>) {
@@ -286,6 +298,43 @@ status/seal/unseal need an unlocked agent on this host."
             },
         }
     }
+
+    #[tool(
+        name = "nimvault_mv",
+        description = "Rename a vault entry target path (`nimvault mv old new`). Requires mutate permission. Does not print file contents.",
+        annotations(title = "nimvault mv", read_only_hint = false, destructive_hint = false)
+    )]
+    async fn nimvault_mv(&self, Parameters(a): Parameters<MoveArgs>) -> String {
+        if !mutate_enabled() {
+            return blocked_mutate();
+        }
+        let mut args = vec!["mv".into(), a.old_path.clone(), a.new_path.clone()];
+        push_recipient(&mut args, &a.recipient);
+        match run_nimvault(&args, &a.repo_path).await {
+            Ok(o) if o.ok => o.display(),
+            Ok(o) => format!("FAILED
+{}", o.display()),
+            Err(e) => err_help(e),
+        }
+    }
+
+    #[tool(
+        name = "nimvault_resolve_repo",
+        description = "Resolve which directory would be used as repo_path (explicit arg, NIMVAULT_DEFAULT_REPO, or walk-up to .vault). Read-only.",
+        annotations(title = "resolve vault repo", read_only_hint = true, idempotent_hint = true)
+    )]
+    async fn nimvault_resolve_repo(&self, Parameters(a): Parameters<RepoArgs>) -> String {
+        match crate::cli::resolve_workdir(&a.repo_path) {
+            Ok(p) => format!("repo_path={}
+.has_vault_config={}
+.has_manifest={}",
+                p.display(),
+                p.join(".vault/config").is_file(),
+                p.join(".vault/manifest.gpg").is_file()),
+            Err(e) => format!("ERROR: {e}"),
+        }
+    }
+
 }
 
 #[tool_handler]

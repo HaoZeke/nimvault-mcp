@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Full CLI parity (`mv`), repo walk-up discovery, `nimvault_resolve_repo`
+- `NIMVAULT_MCP_READ_ONLY` hard lock + optional audit log
+- `docs/SURVEY.md` landscape vs Vault/1Password/sops MCP
+- Never exposes vaulted file bodies to the model
+
 ## 0.1.3
 
 - GitHub Release multi-arch assets published; doctor points at /releases/latest
