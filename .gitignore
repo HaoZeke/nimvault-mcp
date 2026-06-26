@@ -1,0 +1,5 @@
+/target
+/npm/bin/nimvault-mcp
+/npm/bin/nimvault-mcp.exe
+*.tar
+Cargo.lock

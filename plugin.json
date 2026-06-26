@@ -1,0 +1,13 @@
+{
+  "name": "nimvault",
+  "version": "0.1.0",
+  "description": "GPG opaque-blob vault via nimvault CLI: list, status, scan, add, seal, unseal. Mutating tools gated by NIMVAULT_MCP_ALLOW_MUTATE.",
+  "author": {
+    "name": "Rohit Goswami",
+    "url": "https://github.com/HaoZeke"
+  },
+  "homepage": "https://nimvault.rgoswami.me",
+  "repository": "https://github.com/HaoZeke/nimvault-mcp",
+  "license": "MIT",
+  "keywords": ["nimvault", "gpg", "vault", "secrets", "mcp", "chezmoi"]
+}

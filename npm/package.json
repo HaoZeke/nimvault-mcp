@@ -1,0 +1,21 @@
+{
+  "name": "@haozeke/nimvault-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for nimvault GPG opaque-blob vault operations",
+  "bin": {
+    "nimvault-mcp": "bin/run.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "files": ["bin/", "scripts/", "README.md"],
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"],
+  "keywords": ["mcp", "nimvault", "gpg", "vault", "secrets", "model-context-protocol"],
+  "homepage": "https://nimvault.rgoswami.me",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HaoZeke/nimvault-mcp.git"
+  },
+  "license": "MIT"
+}
