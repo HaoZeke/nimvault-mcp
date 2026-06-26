@@ -1,24 +1,29 @@
 # nimvault branding
 
-## Mark concept
+## Canonical mark (do not invent alternatives)
 
-**Sealed vault hex + opaque blob** — geometric strongbox (indigo) holding a
-teal-sealed capsule with no readable name. Encrypted opaque storage, not a
-stock padlock.
+**Source of truth:** [`logo/nimvault.svg`](logo/nimvault.svg)
 
-| File | Use |
-|------|-----|
-| `logo.svg` | Primary (dark); README, site, avatars |
-| `logo-light.svg` | Light backgrounds / docs |
-| `logo.png` / `nimvault-mark.jpg` | Raster / social / GitHub avatar |
-| `favicon-32.png` | Favicon when present |
+That is the logo on [nimvault.rgoswami.me](https://nimvault.rgoswami.me) (`_static/nimvault.svg` in the Sphinx build — copy of this file). Teal vault gradient + **official Nim crown** + gold lock.
 
-## Colors
+| File | Role |
+|------|------|
+| `logo/nimvault.svg` | **Canonical** — site header, OG image path, favicon source |
+| `logo.svg` | Symlink-style copy of the canonical SVG for shallow paths |
+| `logo.png` | Raster export for GitHub avatars / social (generated from SVG) |
+| `_archive_session/` | One-off generated marks — **not** official |
 
-| Token | Hex | Role |
-|-------|-----|------|
-| Ink | `#0f1117` | Field |
-| Indigo vault | `#312e81` / `#6366f1` | Structure |
-| Teal seal | `#2dd4bf` | Integrity accent |
+## Usage
 
-MIT with the nimvault tree. SVG is the source of truth; raster is a rendered hero.
+- Docs / Shibuya: `docs` copies into `_static/nimvault.svg` (see site deploy).
+- MCP plugin README: point at `branding/logo/nimvault.svg` or `branding/logo.svg`.
+- GitHub: set repo avatar from `logo.png` or upload the SVG-rendered PNG.
+
+## Colors (from the mark)
+
+| | |
+|--|--|
+| Vault teal | `#004D40` → `#00796B` |
+| Door | `#00695C` / `#80CBC4` / `#E0F2F1` |
+| Lock gold | `#FFD54F` / `#F9A825` |
+| Nim crown | `#f3d400` / `#ffe953` |

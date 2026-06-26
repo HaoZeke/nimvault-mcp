@@ -1,4 +1,4 @@
-<p align="center"><img src="branding/logo.svg" alt="nimvault" width="128" height="128"/></p>
+<p align="center"><img src="branding/logo/nimvault.svg" alt="nimvault" width="128" height="128"/></p>
 
 # nimvault-mcp
 
