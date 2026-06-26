@@ -64,7 +64,7 @@ impl Server {
                     "{mcp}\n(no --version; help snippet)\n{}",
                     trunc(&o2.display(), 500)
                 ),
-                Err(_) => format!("{mcp}\nERROR: {e}{}", install_help_block()),
+                Err(_) => format!("{mcp}\nERROR: {e}{}", &install_help_block()),
             },
         }
     }
@@ -110,7 +110,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
@@ -129,7 +129,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
@@ -151,7 +151,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
@@ -178,7 +178,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
@@ -205,7 +205,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
@@ -229,7 +229,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
@@ -253,7 +253,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
@@ -280,7 +280,7 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => {
                 let mut msg = format!("ERROR: {e}");
                 if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(install_help_block());
+                    msg.push_str(&install_help_block());
                 }
                 msg
             },
