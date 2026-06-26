@@ -118,3 +118,28 @@ cp target/release/nimvault-mcp ~/.local/bin/
 ## License
 
 MIT
+
+## Releases
+
+Push a version tag to publish multi-arch binaries to GitHub Releases (used by
+`cargo binstall` and the npm postinstall downloader):
+
+```bash
+# bump Cargo.toml / plugin.json / npm/package.json together
+./scripts/set-version.sh 0.1.2
+git commit -am "release: 0.1.2"
+git tag v0.1.2
+git push origin main --tags
+```
+
+Optional repo secrets for the same workflow:
+
+| Secret | Effect |
+|--------|--------|
+| `CARGO_REGISTRY_TOKEN` | `cargo publish` to crates.io |
+| `NPM_TOKEN` | `npm publish` `@haozeke/nimvault-mcp` |
+
+Without those secrets, **GitHub Release assets still publish** — enough for
+`cargo binstall nimvault-mcp` once the crate is on crates.io, or direct tarball
+download. The MCP `nimvault_doctor` tool points users at Releases if the binary
+is missing.

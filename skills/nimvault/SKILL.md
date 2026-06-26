@@ -12,6 +12,8 @@ Prefer **MCP tools** (`nimvault_list`, `nimvault_status`, `nimvault_scan`, …) 
 
 ## Critical rules
 
+Call **nimvault_doctor** first if the user just installed the plugin or tools error with CLI-not-found.
+
 1. **Always set `repo_path`** to the **git repository root** that contains `.vault/` (nimvault is CWD-sensitive). Examples: `~/.local/share/chezmoi`, a project checkout with `.vault/config`.
 2. **Mutating tools are blocked** unless the user set `NIMVAULT_MCP_ALLOW_MUTATE=1` in MCP env (add, add_dir, remove, seal, unseal).
 3. **Never commit plaintext secrets.** After `nimvault_add`, run `nimvault_seal` and `git add .vault/` only.

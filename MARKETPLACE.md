@@ -59,3 +59,6 @@ grok plugin install /home/rgoswami/Git/Github/Tools/nimvault-mcp --trust
 ```
 
 Requires `nimvault` CLI on PATH (`nimble install nimvault`) and preferably `nimvault-mcp` on PATH for fast startup (launcher falls back to `cargo run --release`).
+
+Agents without prior setup should call **nimvault_doctor** (tool) or read MCP server instructions.
+

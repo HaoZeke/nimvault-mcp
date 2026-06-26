@@ -5,6 +5,7 @@
 
 mod cli;
 mod constants;
+mod doctor;
 mod server;
 mod setup;
 mod tool_args;
@@ -24,12 +25,23 @@ async fn main() -> anyhow::Result<()> {
         setup::run(&args).await;
         return Ok(());
     }
-
-    if which::which("nimvault").is_err() && constants::nimvault_bin_env().is_none() {
-        eprintln!(
-            "nimvault-mcp: `nimvault` not on PATH (and NIMVAULT_BIN unset).              Install with `nimble install nimvault`."
+    if args.iter().any(|a| a == "doctor") {
+        // CLI convenience (same text agents get from the tool)
+        let (cli_ok, detail) = match which::which("nimvault") {
+            Ok(p) => (true, p.display().to_string()),
+            Err(_) => (
+                false,
+                "not on PATH (set NIMVAULT_BIN or install nimvault)".into(),
+            ),
+        };
+        println!(
+            "{}",
+            doctor::format_doctor_report(cli_ok, &detail, "Use MCP tool nimvault_doctor when connected.")
         );
+        return Ok(());
     }
+
+    doctor::emit_startup_stderr();
 
     let server = Server::new();
     let service = server.serve(rmcp::transport::io::stdio()).await?;

@@ -8,6 +8,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::constants::{default_repo_env, nimvault_bin_env};
+use crate::doctor::install_help_block;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 600;
 
@@ -51,7 +52,8 @@ fn resolve_bin() -> Result<PathBuf, String> {
     }
     which::which("nimvault").map_err(|e| {
         format!(
-            "nimvault not found on PATH ({e}). Install: `nimble install nimvault`              or set NIMVAULT_BIN. Docs: https://nimvault.rgoswami.me"
+            "nimvault not found on PATH ({e}). Set NIMVAULT_BIN or install the CLI.{}",
+            install_help_block()
         )
     })
 }
@@ -66,7 +68,7 @@ fn resolve_workdir(repo_path: &Option<String>) -> Result<PathBuf, String> {
         Some(p) => {
             let path = PathBuf::from(&p);
             if !path.exists() {
-                return Err(format!("repo_path does not exist: {p}"));
+                return Err(format!("repo_path does not exist: {p}. Pass the git root that contains .vault/ (or set NIMVAULT_DEFAULT_REPO)."));
             }
             Ok(path)
         }

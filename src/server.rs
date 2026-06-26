@@ -9,6 +9,7 @@ use rmcp::{
 
 use crate::cli::run_nimvault;
 use crate::constants::{default_recipient_env, mutate_enabled};
+use crate::doctor::{format_doctor_report, install_help_block, server_instructions};
 use crate::tool_args::*;
 
 #[derive(Clone)]
@@ -26,8 +27,7 @@ fn trunc(s: &str, max: usize) -> String {
 }
 
 fn blocked_mutate() -> String {
-    "BLOCKED: set NIMVAULT_MCP_ALLOW_MUTATE=1 to enable add/remove/seal/unseal      (writes `.vault/` and may decrypt secrets). list/status/scan remain available."
-        .into()
+    "BLOCKED: set NIMVAULT_MCP_ALLOW_MUTATE=1 in the MCP server env (Grok plugin / Claude mcpServers / Codex mcp_servers) to enable add/remove/seal/unseal (writes `.vault/` and may decrypt secrets). list/status/scan remain available. Call nimvault_doctor for a full checklist.".into()
 }
 
 fn push_recipient(args: &mut Vec<String>, recipient: &Option<String>) {
@@ -61,9 +61,32 @@ impl Server {
             Ok(o) => format!("{mcp}\n{}", o.display()),
             Err(e) => match run_nimvault(&["--help".into()], &None).await {
                 Ok(o2) => format!("{mcp}\n(no --version; help snippet)\n{}", trunc(&o2.display(), 500)),
-                Err(_) => format!("{mcp}\nERROR: {e}"),
+                Err(_) => format!("{mcp}\nERROR: {e}{}"),
             },
         }
+
+    #[tool(
+        name = "nimvault_doctor",
+        description = "Diagnose nimvault CLI / MCP readiness and print install steps for missing pieces. Call this first when setup is unclear or tools return CLI-not-found errors.",
+        annotations(title = "nimvault doctor", read_only_hint = true, idempotent_hint = true)
+    )]
+    async fn nimvault_doctor(&self, Parameters(_a): Parameters<EmptyArgs>) -> String {
+        let (cli_ok, detail) = match run_nimvault(&["--help".into()], &None).await {
+            Ok(o) => {
+                let d = o.display();
+                let snippet = d.lines().take(3).collect::<Vec<_>>().join(" | ");
+                (o.ok || d.to_ascii_lowercase().contains("nimvault") || d.contains("SUBCMD"), snippet)
+            }
+            Err(e) => (false, e),
+        };
+        let gpg = if cli_ok {
+            "GPG: ensure your agent can unlock the key in .vault/config (recipient). status/seal/unseal need an unlocked agent on this host."
+        } else {
+            ""
+        };
+        format_doctor_report(cli_ok, &detail, gpg)
+    }
+
     }
 
     #[tool(
@@ -75,7 +98,13 @@ impl Server {
         match run_nimvault(&["list".into()], &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 48_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 
@@ -88,7 +117,13 @@ impl Server {
         match run_nimvault(&["status".into()], &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 48_000),
             Ok(o) => format!("FAILED (GPG/agent?)\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 
@@ -104,7 +139,13 @@ impl Server {
         }
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) => trunc(&o.display(), 48_000),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 
@@ -125,7 +166,13 @@ impl Server {
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 
@@ -146,7 +193,13 @@ impl Server {
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 
@@ -164,7 +217,13 @@ impl Server {
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 
@@ -182,7 +241,13 @@ impl Server {
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 32_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 
@@ -203,7 +268,13 @@ impl Server {
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 32_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => format!("ERROR: {e}"),
+            Err(e) => {
+                let mut msg = format!("ERROR: {e}");
+                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
+                    msg.push_str(install_help_block());
+                }
+                msg
+            },
         }
     }
 }
@@ -216,10 +287,6 @@ impl ServerHandler for Server {
                 "nimvault-mcp",
                 env!("CARGO_PKG_VERSION"),
             ))
-            .with_instructions(
-                "GPG opaque-blob vault via the local `nimvault` CLI. Always pass repo_path \
-                 to the git root that owns `.vault/` (CWD-sensitive). Prefer list/status/scan. \
-                 Mutating tools need NIMVAULT_MCP_ALLOW_MUTATE=1 and an unlocked GPG agent.",
-            )
+            .with_instructions(server_instructions())
     }
 }
