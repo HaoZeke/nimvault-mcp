@@ -1,6 +1,6 @@
 {
   "name": "nimvault",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "GPG opaque-blob vault via nimvault CLI: list, status, scan, add, seal, unseal. Mutating tools gated by NIMVAULT_MCP_ALLOW_MUTATE.",
   "author": {
     "name": "Rohit Goswami",

@@ -86,3 +86,10 @@ cargo build --release
 ## License
 
 MIT
+
+## Performance notes
+
+Use a recent `nimvault` (0.4.1+) and run `nimvault seal` once so the manifest
+stores plaintext content hashes. Then `nimvault_status` is local SHA-256 only
+(no GPG per entry). Set `NIMVAULT_GPG_PARALLEL` (default 8) for seal/unseal
+throughput on large vaults.
