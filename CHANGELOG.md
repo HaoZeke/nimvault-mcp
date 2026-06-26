@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- GitHub Release multi-arch assets published; doctor points at /releases/latest
+- Assert install paths (curl tarball) in doctor output
+
 ## 0.1.2
 
 - `nimvault_doctor` tool + `nimvault-mcp doctor` CLI for install/readiness guidance

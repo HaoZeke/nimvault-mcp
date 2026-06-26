@@ -12,7 +12,7 @@ pub fn server_instructions() -> String {
          **First-time setup (if tools fail or CLI is missing):**\n\
          1. Install CLI: `nimble install nimvault` (docs: https://nimvault.rgoswami.me)\n\
          2. Install this MCP binary: `cargo install --git https://github.com/HaoZeke/nimvault-mcp` \
-            OR `cargo binstall nimvault-mcp` OR download a GitHub Release for your OS, \
+            OR `cargo binstall nimvault-mcp` OR download from https://github.com/HaoZeke/nimvault-mcp/releases (e.g. v0.1.3), \
             OR `npx @haozeke/nimvault-mcp` after a release publishes npm assets.\n\
          3. Configure a vault in a git repo: `mkdir -p .vault && echo 'recipient = YOUR_GPG_KEY_ID' > .vault/config`\n\
          4. Call tool `nimvault_doctor` for a live checklist.\n\n\
@@ -39,7 +39,7 @@ pub fn install_help_block() -> &'static str {
        Docs: https://nimvault.rgoswami.me\n\
      MCP server:\n\
        cargo install --git https://github.com/HaoZeke/nimvault-mcp\n\
-       cargo binstall nimvault-mcp   # after GitHub Releases exist for this version\n\
+       cargo binstall nimvault-mcp   # uses GitHub Release assets\n\
        # releases: https://github.com/HaoZeke/nimvault-mcp/releases\n\
      Grok plugin (bundles skill + .mcp.json):\n\
        grok plugin install https://github.com/HaoZeke/nimvault-mcp.git --trust\n\
