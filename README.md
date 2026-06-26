@@ -1,3 +1,5 @@
+<p align="center"><img src="branding/logo.svg" alt="nimvault" width="128" height="128"/></p>
+
 # nimvault-mcp
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
