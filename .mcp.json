@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "nimvault": {
+      "command": "nimvault-mcp",
+      "args": [],
+      "env": {
+        "NIMVAULT_MCP_ALLOW_MUTATE": "0"
+      }
+    }
+  }
+}
