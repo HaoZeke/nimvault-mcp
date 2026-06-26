@@ -1,0 +1,13 @@
+{
+  "name": "nimvault",
+  "description": "GPG opaque-blob vault via nimvault: list/status/scan; gated add/seal/unseal for agent-safe secrets in git repos. Local CLI only — no cloud.",
+  "category": "development",
+  "source": {
+    "source": "url",
+    "url": "https://github.com/HaoZeke/nimvault-mcp.git",
+    "sha": "6d7da9d34071c740740b97c620f1cbf042f505da"
+  },
+  "homepage": "https://github.com/HaoZeke/nimvault-mcp",
+  "keywords": ["nimvault", "nimvault mcp", "opaque-blob", "gpg vault"],
+  "domains": ["nimvault.rgoswami.me", "github.com/HaoZeke/nimvault"]
+}

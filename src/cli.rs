@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
 
-use crate::constants::nimvault_bin_env;
+use crate::constants::{default_repo_env, nimvault_bin_env};
 
 const DEFAULT_TIMEOUT_SECS: u64 = 600;
 
@@ -57,15 +57,20 @@ fn resolve_bin() -> Result<PathBuf, String> {
 }
 
 fn resolve_workdir(repo_path: &Option<String>) -> Result<PathBuf, String> {
-    match repo_path {
-        Some(p) if !p.trim().is_empty() => {
-            let path = PathBuf::from(p.trim());
+    let chosen = repo_path
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(default_repo_env);
+    match chosen {
+        Some(p) => {
+            let path = PathBuf::from(&p);
             if !path.exists() {
                 return Err(format!("repo_path does not exist: {p}"));
             }
             Ok(path)
         }
-        _ => std::env::current_dir().map_err(|e| format!("Cannot get current dir: {e}")),
+        None => std::env::current_dir().map_err(|e| format!("Cannot get current dir: {e}")),
     }
 }
 

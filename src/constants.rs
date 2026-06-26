@@ -18,6 +18,14 @@ pub fn default_recipient_env() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// Default `repo_path` when tool args omit it (Grok/Claude/Codex can set per-server env).
+pub fn default_repo_env() -> Option<String> {
+    std::env::var("NIMVAULT_DEFAULT_REPO")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// When true, mutating tools (add/remove/seal/unseal) are allowed. Default off for safety.
 pub fn mutate_enabled() -> bool {
     match std::env::var("NIMVAULT_MCP_ALLOW_MUTATE") {

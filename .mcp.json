@@ -4,7 +4,11 @@
       "command": "nimvault-mcp",
       "args": [],
       "env": {
-        "NIMVAULT_MCP_ALLOW_MUTATE": "0"
+        "NIMVAULT_MCP_ALLOW_MUTATE": "0",
+        "NIMVAULT_GPG_RECIPIENT": "${NIMVAULT_GPG_RECIPIENT}",
+        "NIMVAULT_BIN": "${NIMVAULT_BIN}",
+        "NIMVAULT_DEFAULT_REPO": "${NIMVAULT_DEFAULT_REPO}",
+        "NIMVAULT_GPG_PARALLEL": "${NIMVAULT_GPG_PARALLEL}"
       }
     }
   }
