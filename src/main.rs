@@ -1,11 +1,11 @@
 //! # nimvault-mcp
 //!
-//! MCP server for [nimvault](https://github.com/HaoZeke/nimvault) — GPG-encrypted
-//! opaque-blob vault operations for agents (list, status, scan, gated mutate).
+//! MCP server for [nimvault](https://github.com/HaoZeke/nimvault). Design: `docs/ARCHITECTURE.md`.
 
 mod cli;
 mod constants;
 mod doctor;
+mod policy;
 mod server;
 mod setup;
 mod tool_args;
@@ -26,7 +26,6 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     if args.iter().any(|a| a == "doctor") {
-        // CLI convenience (same text agents get from the tool)
         let (cli_ok, detail) = match which::which("nimvault") {
             Ok(p) => (true, p.display().to_string()),
             Err(_) => (
@@ -36,7 +35,11 @@ async fn main() -> anyhow::Result<()> {
         };
         println!(
             "{}",
-            doctor::format_doctor_report(cli_ok, &detail, "Use MCP tool nimvault_doctor when connected.")
+            doctor::format_doctor_report(
+                cli_ok,
+                &detail,
+                "Use MCP tool nimvault_doctor when connected."
+            )
         );
         return Ok(());
     }

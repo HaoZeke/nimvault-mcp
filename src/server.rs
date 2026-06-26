@@ -1,4 +1,6 @@
-//! MCP tool router over the nimvault CLI.
+//! MCP tool router — thin adapter over `policy` + `cli` runner.
+//!
+//! See `docs/ARCHITECTURE.md`. No tool returns vaulted file bodies.
 
 use rmcp::ServerHandler;
 use rmcp::{
@@ -8,50 +10,16 @@ use rmcp::{
 };
 
 use crate::cli::run_nimvault;
-use crate::constants::{default_recipient_env, mutate_enabled, read_only_locked};
-use crate::doctor::{format_doctor_report, install_help_block, server_instructions};
+use crate::doctor::{format_doctor_report, server_instructions};
+use crate::policy::{
+    blocked_mutate_message as blocked_mutate, enrich_error as err_help, ensure_mutate,
+    push_recipient, trunc,
+};
 use crate::tool_args::*;
 
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct Server {
     tool_router: ToolRouter<Self>,
-}
-
-fn trunc(s: &str, max: usize) -> String {
-    let t = s.trim();
-    if t.len() <= max {
-        t.to_string()
-    } else {
-        format!("{}\n… truncated ({} bytes total)", &t[..max], t.len())
-    }
-}
-
-fn blocked_mutate() -> String {
-    if read_only_locked() {
-        return "BLOCKED: NIMVAULT_MCP_READ_ONLY=1 — all mutating tools disabled (hard lock). list/status/scan/doctor only. Call nimvault_doctor.".into();
-    }
-    "BLOCKED: set NIMVAULT_MCP_ALLOW_MUTATE=1 in MCP env to enable add/remove/mv/seal/unseal (writes `.vault/`; never returns secret file bodies). list/status/scan remain available. Call nimvault_doctor. See docs/SURVEY.md for threat model niche.".into()
-}
-
-fn err_help(e: String) -> String {
-    let mut msg = format!("ERROR: {e}");
-    if msg.contains("not found") || msg.contains("NIMVAULT_BIN") || msg.contains("No repo_path") {
-        msg.push_str(&install_help_block());
-    }
-    msg
-}
-
-fn push_recipient(args: &mut Vec<String>, recipient: &Option<String>) {
-    let r = recipient
-        .as_ref()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .or_else(default_recipient_env);
-    if let Some(r) = r {
-        args.push("--recipient".into());
-        args.push(r);
-    }
 }
 
 #[tool_router]
@@ -76,7 +44,7 @@ impl Server {
                     "{mcp}\n(no --version; help snippet)\n{}",
                     trunc(&o2.display(), 500)
                 ),
-                Err(_) => format!("{mcp}\nERROR: {e}{}", &install_help_block()),
+                Err(_) => format!("{mcp}\nERROR: {e}{}", &crate::doctor::install_help_block()),
             },
         }
     }
@@ -119,13 +87,7 @@ status/seal/unseal need an unlocked agent on this host."
         match run_nimvault(&["list".into()], &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 48_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -138,13 +100,7 @@ status/seal/unseal need an unlocked agent on this host."
         match run_nimvault(&["status".into()], &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 48_000),
             Ok(o) => format!("FAILED (GPG/agent?)\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -160,13 +116,7 @@ status/seal/unseal need an unlocked agent on this host."
         }
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) => trunc(&o.display(), 48_000),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -176,8 +126,8 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault add", read_only_hint = false, destructive_hint = false)
     )]
     async fn nimvault_add(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
-        if !mutate_enabled() {
-            return blocked_mutate();
+        if let Err(m) = ensure_mutate() {
+            return m;
         }
         let mut args = vec!["add".into(), a.path.clone()];
         push_recipient(&mut args, &a.recipient);
@@ -187,13 +137,7 @@ status/seal/unseal need an unlocked agent on this host."
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -203,8 +147,8 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault add-dir", read_only_hint = false, destructive_hint = false)
     )]
     async fn nimvault_add_dir(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
-        if !mutate_enabled() {
-            return blocked_mutate();
+        if let Err(m) = ensure_mutate() {
+            return m;
         }
         let mut args = vec!["add-dir".into(), a.path.clone()];
         push_recipient(&mut args, &a.recipient);
@@ -214,13 +158,7 @@ status/seal/unseal need an unlocked agent on this host."
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -230,21 +168,15 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault remove", read_only_hint = false, destructive_hint = true)
     )]
     async fn nimvault_remove(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
-        if !mutate_enabled() {
-            return blocked_mutate();
+        if let Err(m) = ensure_mutate() {
+            return m;
         }
         let mut args = vec!["remove".into(), a.path.clone()];
         push_recipient(&mut args, &a.recipient);
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -254,21 +186,15 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault seal", read_only_hint = false, destructive_hint = true)
     )]
     async fn nimvault_seal(&self, Parameters(a): Parameters<SealArgs>) -> String {
-        if !mutate_enabled() {
-            return blocked_mutate();
+        if let Err(m) = ensure_mutate() {
+            return m;
         }
         let mut args = vec!["seal".into()];
         push_recipient(&mut args, &a.recipient);
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 32_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -278,8 +204,8 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault unseal", read_only_hint = false, destructive_hint = true)
     )]
     async fn nimvault_unseal(&self, Parameters(a): Parameters<UnsealArgs>) -> String {
-        if !mutate_enabled() {
-            return blocked_mutate();
+        if let Err(m) = ensure_mutate() {
+            return m;
         }
         let mut args = vec!["unseal".into()];
         if a.allow_unsigned.unwrap_or(false) {
@@ -289,13 +215,7 @@ status/seal/unseal need an unlocked agent on this host."
         match run_nimvault(&args, &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 32_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
-            Err(e) => {
-                let mut msg = format!("ERROR: {e}");
-                if msg.contains("not found") || msg.contains("NIMVAULT_BIN") {
-                    msg.push_str(&install_help_block());
-                }
-                msg
-            },
+            Err(e) => err_help(e.as_str()),
         }
     }
 
@@ -305,8 +225,8 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault mv", read_only_hint = false, destructive_hint = false)
     )]
     async fn nimvault_mv(&self, Parameters(a): Parameters<MoveArgs>) -> String {
-        if !mutate_enabled() {
-            return blocked_mutate();
+        if let Err(m) = ensure_mutate() {
+            return m;
         }
         let mut args = vec!["mv".into(), a.old_path.clone(), a.new_path.clone()];
         push_recipient(&mut args, &a.recipient);
@@ -314,7 +234,7 @@ status/seal/unseal need an unlocked agent on this host."
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED
 {}", o.display()),
-            Err(e) => err_help(e),
+            Err(e) => err_help(e.as_str()),
         }
     }
 

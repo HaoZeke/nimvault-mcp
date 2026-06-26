@@ -1,4 +1,10 @@
 # Changelog
+## 0.1.6
+
+- `docs/ARCHITECTURE.md` MCP SE design; `docs/INTEGRATIONS.md` pass/KeePassXC/Enpass
+- `policy` module; server is thin adapter; unit tests on policy
+- Doctor reports pass/keepassxc-cli presence (import is file pipeline, not secret egress)
+
 
 ## 0.1.5
 
