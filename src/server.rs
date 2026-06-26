@@ -60,10 +60,14 @@ impl Server {
         match run_nimvault(&["--version".into()], &None).await {
             Ok(o) => format!("{mcp}\n{}", o.display()),
             Err(e) => match run_nimvault(&["--help".into()], &None).await {
-                Ok(o2) => format!("{mcp}\n(no --version; help snippet)\n{}", trunc(&o2.display(), 500)),
-                Err(_) => format!("{mcp}\nERROR: {e}{}"),
+                Ok(o2) => format!(
+                    "{mcp}\n(no --version; help snippet)\n{}",
+                    trunc(&o2.display(), 500)
+                ),
+                Err(_) => format!("{mcp}\nERROR: {e}{}", install_help_block()),
             },
         }
+    }
 
     #[tool(
         name = "nimvault_doctor",
@@ -75,19 +79,24 @@ impl Server {
             Ok(o) => {
                 let d = o.display();
                 let snippet = d.lines().take(3).collect::<Vec<_>>().join(" | ");
-                (o.ok || d.to_ascii_lowercase().contains("nimvault") || d.contains("SUBCMD"), snippet)
+                (
+                    o.ok
+                        || d.to_ascii_lowercase().contains("nimvault")
+                        || d.contains("SUBCMD"),
+                    snippet,
+                )
             }
             Err(e) => (false, e),
         };
         let gpg = if cli_ok {
-            "GPG: ensure your agent can unlock the key in .vault/config (recipient). status/seal/unseal need an unlocked agent on this host."
+            "GPG: ensure your agent can unlock the key in .vault/config (recipient). \
+status/seal/unseal need an unlocked agent on this host."
         } else {
             ""
         };
         format_doctor_report(cli_ok, &detail, gpg)
     }
 
-    }
 
     #[tool(
         name = "nimvault_list",
