@@ -96,7 +96,11 @@ jobs:
             echo "Version $VERSION already on crates.io, skipping"
             exit 0
           fi
-          cargo publish --allow-dirty
+          # Bad/expired token must not fail the Release (GitHub assets are the primary install path).
+          cargo publish --allow-dirty || {
+            echo "cargo publish failed (token or registry); GitHub Release assets remain valid"
+            exit 0
+          }
 
   npm-publish:
     name: Publish to npm
