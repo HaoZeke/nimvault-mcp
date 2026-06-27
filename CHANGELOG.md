@@ -1,4 +1,15 @@
 # Changelog
+## 0.3.2
+
+- Route every vault op through libnimvault when loaded (CLI fallback only if missing)
+- MCP session trap test: seal/add do not spawn nimvault CLI with library present
+- Prefer nimvault CLI ≥ 0.4.2 + `nimble buildLib` / `NIMVAULT_LIB` for in-process path
+- TRANSPORTS.md Tier D documents full inproc-first MCP surface
+
+## 0.3.1
+
+- Prior 0.3.x line (doctor, multi-arch releases, sticky session, UDS serve)
+
 ## 0.1.6
 
 - `docs/ARCHITECTURE.md` MCP SE design; `docs/INTEGRATIONS.md` pass/KeePassXC/Enpass

@@ -1,6 +1,6 @@
 [package]
 name = "nimvault-mcp"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 license = "MIT"
 description = "MCP server for nimvault (GPG opaque-blob vault: list, status, add, seal, unseal)"
