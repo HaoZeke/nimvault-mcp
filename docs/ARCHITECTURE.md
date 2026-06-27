@@ -71,4 +71,6 @@ See **`docs/TRANSPORTS.md`**. Summary:
 - **Better local multi-client:** `nimvault-mcp serve --socket $XDG_RUNTIME_DIR/nimvault-mcp.sock`
   (Unix stream MCP sessions, mode 0600, one process).
 - **Not default:** Streamable HTTP (prefer loopback + token if ever enabled).
-- **Future:** in-process nimvault library to drop per-tool CLI spawn.
+- **Tier D (shipped):** `libnimvault` C ABI + `inproc::try_inproc` — every vault op
+  prefers in-process when the `.so` is loaded; CLI is fallback only. See
+  `docs/TRANSPORTS.md` Tier D.

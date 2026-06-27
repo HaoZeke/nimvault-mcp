@@ -65,31 +65,28 @@ tools stop re-arguing path. (Stdio session = one process = natural scope.)
 Higher footgun (any local process might connect) → require
 `NIMVAULT_MCP_HTTP_TOKEN` and document threat model. Prefer UDS on Linux/macOS.
 
-### Tier D — In-process library (future)
+### Tier D — In-process library (**shipped** for MCP vault ops)
 
-Extract nimvault crypto to a C ABI / Rust crate and **stop spawning** `nimvault`
-per tool. Biggest latency win; largest engineering cost. Out of band until CLI
-stabilizes.
+`libnimvault.so` C ABI + MCP `inproc::try_inproc` — see section below. CLI spawn
+is fallback only when the `.so` or an op symbol is missing.
 
-### Tier E — Human-in-the-loop mutate (MCP elicitation)
+### Tier E — Human-in-the-loop mutate (MCP elicitation) / brokered IPC
 
 Mutate tools request **client-side confirmation** (MCP elicitation) instead of
 only env gates — better SE for “agent wanted seal” accidents. Depends on host
-support.
+support. Optional later: NNG/ZeroMQ multi-client control plane (non-goal for Tier D).
 
 ## What we deliberately keep from the “stdio design”
 
 - **Tool schema + policy + no secret egress** — independent of transport.
-- **CLI as port** — one GPG implementation.
+- **CLI as port** — one GPG implementation (and shared lib implementation).
 - **Default entrypoint = stdio** so Grok/Claude/Codex work without a daemon.
 
 ## Verdict
 
-Improving on ookcite-style **stdio-only** for nimvault means **adding a local
-daemon transport (UDS) and session semantics**, not abandoning stdio. The agent
-ecosystem still needs stdio; the vault wants a **long-lived, multi-client, no-egress
-local server**. `serve --socket` is that step; HTTP loopback and in-process lib
-are the next rungs.
+Improving on ookcite-style **stdio-only** for nimvault means **UDS session + Tier D
+in-process ops**, not abandoning stdio. Agents still attach via stdio; vault tools
+prefer `libnimvault` when loaded.
 
 ## Tier D — in-process (complete for MCP surface)
 
