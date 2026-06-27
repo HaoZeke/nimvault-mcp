@@ -1,6 +1,6 @@
 {
   "name": "@haozeke/nimvault-mcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "MCP server for nimvault GPG opaque-blob vault operations",
   "bin": {
     "nimvault-mcp": "bin/run.js"

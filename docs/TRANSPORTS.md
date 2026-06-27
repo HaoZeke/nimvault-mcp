@@ -90,3 +90,12 @@ daemon transport (UDS) and session semantics**, not abandoning stdio. The agent
 ecosystem still needs stdio; the vault wants a **long-lived, multi-client, no-egress
 local server**. `serve --socket` is that step; HTTP loopback and in-process lib
 are the next rungs.
+
+## Tier D — in-process (partial, implemented)
+
+`libnimvault.so` exposes `nv_list` / `nv_status` (C ABI). nimvault-mcp **dlopen**s it
+when present (`NIMVAULT_LIB` or `~/.local/lib/libnimvault.so`). Mutate ops still
+use the CLI until more of the C API is exported (seal/unseal call `quit` paths).
+
+Build: `cd nimvault && nimble buildLib && cp lib/libnimvault.so ~/.local/lib/`
+

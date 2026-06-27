@@ -10,6 +10,7 @@ mod policy;
 mod serve;
 mod server;
 mod session;
+mod inproc;
 mod setup;
 mod tool_args;
 

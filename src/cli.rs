@@ -147,6 +147,13 @@ pub async fn run_nimvault_session(
     session.remember_root(workdir.clone());
     let tool = args.first().map(|s| s.as_str()).unwrap_or("?");
     audit(tool, &workdir, &args.join(" "));
+    // In-process fast path for list/status when libnimvault.so is available.
+    if tool == "list" || tool == "status" {
+        let recip = args.windows(2).find(|w| w[0] == "--recipient").map(|w| w[1].as_str());
+        if let Some(r) = crate::inproc::try_inproc(tool, &workdir, recip) {
+            return r;
+        }
+    }
     run_nimvault_in(args, &workdir).await
 }
 
