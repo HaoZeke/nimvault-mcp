@@ -13,3 +13,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test
       - run: cargo build --release
+      - name: CLI surface smoke
+        run: |
+          ./target/release/nimvault-mcp --version
+          ./target/release/nimvault-mcp doctor | head -5
+          ./target/release/nimvault-mcp serve --print-unit --socket /tmp/x.sock | head -3

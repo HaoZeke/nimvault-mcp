@@ -9,6 +9,7 @@ mod doctor;
 mod policy;
 mod serve;
 mod server;
+mod session;
 mod setup;
 mod tool_args;
 
@@ -53,11 +54,14 @@ async fn main() -> anyhow::Result<()> {
             .find(|w| w[0] == "--socket" || w[0] == "-s")
             .map(|w| PathBuf::from(&w[1]))
             .unwrap_or_else(serve::default_socket_path);
+        if args.iter().any(|a| a == "--print-unit") {
+            print!("{}", serve::systemd_unit_example(&socket));
+            return Ok(());
+        }
         doctor::emit_startup_stderr();
         return serve::run_unix_socket(socket).await;
     }
 
-    // Default: stdio (Grok / Claude / Codex child process)
     doctor::emit_startup_stderr();
     let server = Server::new();
     let service = server.serve(rmcp::transport::io::stdio()).await?;

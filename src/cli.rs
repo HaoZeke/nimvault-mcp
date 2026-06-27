@@ -136,6 +136,20 @@ pub async fn run_nimvault(
     run_nimvault_in(args, &workdir).await
 }
 
+/// Like [`run_nimvault`] but remembers resolved root on `session` for sticky `repo_path`.
+pub async fn run_nimvault_session(
+    session: &crate::session::Session,
+    args: &[String],
+    repo_path: &Option<String>,
+) -> Result<NimvaultOutput, String> {
+    let effective = session.prefer_repo_arg(repo_path);
+    let workdir = resolve_workdir(&effective)?;
+    session.remember_root(workdir.clone());
+    let tool = args.first().map(|s| s.as_str()).unwrap_or("?");
+    audit(tool, &workdir, &args.join(" "));
+    run_nimvault_in(args, &workdir).await
+}
+
 pub async fn run_nimvault_in(args: &[String], dir: &Path) -> Result<NimvaultOutput, String> {
     let bin = resolve_bin()?;
     let mut cmd = Command::new(&bin);

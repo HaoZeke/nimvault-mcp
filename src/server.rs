@@ -9,17 +9,16 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 
-use crate::cli::run_nimvault;
+use crate::cli::{run_nimvault_session, resolve_workdir};
 use crate::doctor::{format_doctor_report, server_instructions};
-use crate::policy::{
-    blocked_mutate_message as blocked_mutate, enrich_error as err_help, ensure_mutate,
-    push_recipient, trunc,
-};
+use crate::policy::{enrich_error as err_help, ensure_mutate, push_recipient, trunc};
 use crate::tool_args::*;
 
 #[derive(Clone)]
 pub struct Server {
+    #[allow(dead_code)]
     tool_router: ToolRouter<Self>,
+    session: crate::session::Session,
 }
 
 #[tool_router]
@@ -27,6 +26,7 @@ impl Server {
     pub fn new() -> Self {
         Self {
             tool_router: Self::tool_router(),
+            session: crate::session::Session::new(),
         }
     }
 
@@ -37,9 +37,9 @@ impl Server {
     )]
     async fn nimvault_version(&self, Parameters(_a): Parameters<EmptyArgs>) -> String {
         let mcp = crate::constants::version_output();
-        match run_nimvault(&["--version".into()], &None).await {
+        match run_nimvault_session(&self.session, &["--version".into()], &None).await {
             Ok(o) => format!("{mcp}\n{}", o.display()),
-            Err(e) => match run_nimvault(&["--help".into()], &None).await {
+            Err(e) => match run_nimvault_session(&self.session, &["--help".into()], &None).await {
                 Ok(o2) => format!(
                     "{mcp}\n(no --version; help snippet)\n{}",
                     trunc(&o2.display(), 500)
@@ -55,7 +55,7 @@ impl Server {
         annotations(title = "nimvault doctor", read_only_hint = true, idempotent_hint = true)
     )]
     async fn nimvault_doctor(&self, Parameters(_a): Parameters<EmptyArgs>) -> String {
-        let (cli_ok, detail) = match run_nimvault(&["--help".into()], &None).await {
+        let (cli_ok, detail) = match run_nimvault_session(&self.session, &["--help".into()], &None).await {
             Ok(o) => {
                 let d = o.display();
                 let snippet = d.lines().take(3).collect::<Vec<_>>().join(" | ");
@@ -84,7 +84,7 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault list", read_only_hint = true, idempotent_hint = true)
     )]
     async fn nimvault_list(&self, Parameters(a): Parameters<RepoArgs>) -> String {
-        match run_nimvault(&["list".into()], &a.repo_path).await {
+        match run_nimvault_session(&self.session, &["list".into()], &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 48_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
             Err(e) => err_help(e.as_str()),
@@ -97,7 +97,7 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "nimvault status", read_only_hint = true, idempotent_hint = true)
     )]
     async fn nimvault_status(&self, Parameters(a): Parameters<RepoArgs>) -> String {
-        match run_nimvault(&["status".into()], &a.repo_path).await {
+        match run_nimvault_session(&self.session, &["status".into()], &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 48_000),
             Ok(o) => format!("FAILED (GPG/agent?)\n{}", trunc(&o.display(), 8_000)),
             Err(e) => err_help(e.as_str()),
@@ -114,7 +114,7 @@ status/seal/unseal need an unlocked agent on this host."
         if let Some(p) = a.path.filter(|s| !s.is_empty()) {
             args.push(p);
         }
-        match run_nimvault(&args, &a.repo_path).await {
+        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) => trunc(&o.display(), 48_000),
             Err(e) => err_help(e.as_str()),
         }
@@ -134,7 +134,7 @@ status/seal/unseal need an unlocked agent on this host."
         if a.no_gitignore.unwrap_or(false) {
             args.push("--no-gitignore".into());
         }
-        match run_nimvault(&args, &a.repo_path).await {
+        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
             Err(e) => err_help(e.as_str()),
@@ -155,7 +155,7 @@ status/seal/unseal need an unlocked agent on this host."
         if a.no_gitignore.unwrap_or(false) {
             args.push("--no-gitignore".into());
         }
-        match run_nimvault(&args, &a.repo_path).await {
+        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
             Err(e) => err_help(e.as_str()),
@@ -173,7 +173,7 @@ status/seal/unseal need an unlocked agent on this host."
         }
         let mut args = vec!["remove".into(), a.path.clone()];
         push_recipient(&mut args, &a.recipient);
-        match run_nimvault(&args, &a.repo_path).await {
+        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED\n{}", o.display()),
             Err(e) => err_help(e.as_str()),
@@ -191,7 +191,7 @@ status/seal/unseal need an unlocked agent on this host."
         }
         let mut args = vec!["seal".into()];
         push_recipient(&mut args, &a.recipient);
-        match run_nimvault(&args, &a.repo_path).await {
+        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 32_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
             Err(e) => err_help(e.as_str()),
@@ -212,7 +212,7 @@ status/seal/unseal need an unlocked agent on this host."
             args.push("--allow-unsigned".into());
         }
         push_recipient(&mut args, &a.recipient);
-        match run_nimvault(&args, &a.repo_path).await {
+        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) if o.ok => trunc(&o.display(), 32_000),
             Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
             Err(e) => err_help(e.as_str()),
@@ -230,7 +230,7 @@ status/seal/unseal need an unlocked agent on this host."
         }
         let mut args = vec!["mv".into(), a.old_path.clone(), a.new_path.clone()];
         push_recipient(&mut args, &a.recipient);
-        match run_nimvault(&args, &a.repo_path).await {
+        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) if o.ok => o.display(),
             Ok(o) => format!("FAILED
 {}", o.display()),
@@ -244,14 +244,21 @@ status/seal/unseal need an unlocked agent on this host."
         annotations(title = "resolve vault repo", read_only_hint = true, idempotent_hint = true)
     )]
     async fn nimvault_resolve_repo(&self, Parameters(a): Parameters<RepoArgs>) -> String {
-        match crate::cli::resolve_workdir(&a.repo_path) {
-            Ok(p) => format!("repo_path={}
-.has_vault_config={}
-.has_manifest={}",
-                p.display(),
-                p.join(".vault/config").is_file(),
-                p.join(".vault/manifest.gpg").is_file()),
-            Err(e) => format!("ERROR: {e}"),
+        let effective = self.session.prefer_repo_arg(&a.repo_path);
+        match resolve_workdir(&effective) {
+            Ok(p) => {
+                self.session.remember_root(p.clone());
+                format!(
+                    "repo_path={}
+sticky=yes
+has_vault_config={}
+has_manifest={}",
+                    p.display(),
+                    p.join(".vault/config").is_file(),
+                    p.join(".vault/manifest.gpg").is_file()
+                )
+            }
+            Err(e) => err_help(e.as_str()),
         }
     }
 
