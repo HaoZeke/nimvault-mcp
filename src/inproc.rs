@@ -1,31 +1,42 @@
-//! Optional in-process nimvault via libnimvault.so (dlopen).
-//! Set `NIMVAULT_LIB` or install to `~/.local/lib/libnimvault.so`.
+//! In-process nimvault via libnimvault.so (dlopen). CLI fallback when missing.
 
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use libloading::Library;
 
-type NvListFn = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_char;
-type NvStatusFn = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_char;
-type NvFreeFn = unsafe extern "C" fn(*mut std::ffi::c_void);
+type NvFreeFn = unsafe extern "C" fn(*mut c_void);
 type NvLastErrorFn = unsafe extern "C" fn() -> *const c_char;
 type NvVersionFn = unsafe extern "C" fn() -> *const c_char;
+type NvRR = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_char;
+type NvUnseal = unsafe extern "C" fn(*const c_char, *const c_char, c_int) -> *mut c_char;
+type NvAdd = unsafe extern "C" fn(*const c_char, *const c_char, *const c_char, c_int) -> *mut c_char;
+type NvMv = unsafe extern "C" fn(*const c_char, *const c_char, *const c_char, *const c_char) -> *mut c_char;
+type NvScan = unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char;
 
 struct LibApi {
     _lib: Library,
-    list: NvListFn,
-    status: NvStatusFn,
     free: NvFreeFn,
     last_error: NvLastErrorFn,
     version: NvVersionFn,
+    list: Option<NvRR>,
+    status: Option<NvRR>,
+    seal: Option<NvRR>,
+    unseal: Option<NvUnseal>,
+    add: Option<NvAdd>,
+    add_dir: Option<NvAdd>,
+    remove: Option<NvRR>, // repo, path, recipient — wait remove is repo, path, recipient = 3 cstrings
+    // redefine remove as 3-arg
+    remove3: Option<unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char>,
+    mv: Option<NvMv>,
+    scan: Option<NvScan>,
 }
 
 static API: OnceLock<Option<&'static LibApi>> = OnceLock::new();
 
-fn candidate_paths() -> Vec<PathBuf> {
+fn candidates() -> Vec<PathBuf> {
     let mut v = Vec::new();
     if let Ok(p) = std::env::var("NIMVAULT_LIB") {
         v.push(PathBuf::from(p));
@@ -47,7 +58,7 @@ fn candidate_paths() -> Vec<PathBuf> {
 
 fn load() -> Option<&'static LibApi> {
     *API.get_or_init(|| {
-        for path in candidate_paths() {
+        for path in candidates() {
             if !path.is_file() {
                 continue;
             }
@@ -56,17 +67,37 @@ fn load() -> Option<&'static LibApi> {
                 Err(_) => continue,
             };
             unsafe {
-                let Ok(list) = lib.get::<NvListFn>(b"nv_list\0") else { continue };
-                let Ok(status) = lib.get::<NvStatusFn>(b"nv_status\0") else { continue };
                 let Ok(free) = lib.get::<NvFreeFn>(b"nv_free\0") else { continue };
                 let Ok(last_error) = lib.get::<NvLastErrorFn>(b"nv_last_error\0") else { continue };
                 let Ok(version) = lib.get::<NvVersionFn>(b"nv_version\0") else { continue };
+                let list = lib.get::<NvRR>(b"nv_list\0").ok().map(|s| *s);
+                let status = lib.get::<NvRR>(b"nv_status\0").ok().map(|s| *s);
+                let seal = lib.get::<NvRR>(b"nv_seal\0").ok().map(|s| *s);
+                let unseal = lib.get::<NvUnseal>(b"nv_unseal\0").ok().map(|s| *s);
+                let add = lib.get::<NvAdd>(b"nv_add\0").ok().map(|s| *s);
+                let add_dir = lib.get::<NvAdd>(b"nv_add_dir\0").ok().map(|s| *s);
+                let remove3 = lib
+                    .get::<unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char>(
+                        b"nv_remove\0",
+                    )
+                    .ok()
+                    .map(|s| *s);
+                let mv = lib.get::<NvMv>(b"nv_mv\0").ok().map(|s| *s);
+                let scan = lib.get::<NvScan>(b"nv_scan\0").ok().map(|s| *s);
                 let api = LibApi {
-                    list: *list,
-                    status: *status,
                     free: *free,
                     last_error: *last_error,
                     version: *version,
+                    list,
+                    status,
+                    seal,
+                    unseal,
+                    add,
+                    add_dir,
+                    remove: None,
+                    remove3,
+                    mv,
+                    scan,
                     _lib: lib,
                 };
                 return Some(Box::leak(Box::new(api)));
@@ -85,27 +116,14 @@ pub fn lib_version() -> Option<String> {
     unsafe {
         let p = (api.version)();
         if p.is_null() {
-            return None;
+            None
+        } else {
+            Some(CStr::from_ptr(p).to_string_lossy().into_owned())
         }
-        Some(CStr::from_ptr(p).to_string_lossy().into_owned())
     }
 }
 
-/// Returns (ok, stdout, stderr) for list/status; None if lib missing or op unsupported.
-pub fn try_inproc(op: &str, workdir: &Path, recipient: Option<&str>) -> Option<(bool, String, String)> {
-    let api = load()?;
-    if op != "list" && op != "status" {
-        return None;
-    }
-    let repo = CString::new(workdir.to_string_lossy().as_bytes()).ok()?;
-    let rec = CString::new(recipient.unwrap_or("")).ok()?;
-    let ptr = unsafe {
-        if op == "list" {
-            (api.list)(repo.as_ptr(), rec.as_ptr())
-        } else {
-            (api.status)(repo.as_ptr(), rec.as_ptr())
-        }
-    };
+fn take(api: &LibApi, ptr: *mut c_char) -> (bool, String, String) {
     if ptr.is_null() {
         let err = unsafe { (api.last_error)() };
         let msg = if err.is_null() {
@@ -113,11 +131,94 @@ pub fn try_inproc(op: &str, workdir: &Path, recipient: Option<&str>) -> Option<(
         } else {
             unsafe { CStr::from_ptr(err).to_string_lossy().into_owned() }
         };
-        return Some((false, String::new(), msg));
+        return (false, String::new(), msg);
     }
     let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
     unsafe {
-        (api.free)(ptr as *mut std::ffi::c_void);
+        (api.free)(ptr as *mut c_void);
     }
-    Some((true, s, String::new()))
+    (true, s, String::new())
+}
+
+/// Map CLI-style argv (first token = op) to in-process call. None => use CLI spawn.
+pub fn try_inproc(args: &[String], workdir: &Path) -> Option<(bool, String, String)> {
+    let api = load()?;
+    let op = args.first()?.as_str();
+    let recip = args
+        .windows(2)
+        .find(|w| w[0] == "--recipient")
+        .map(|w| w[1].as_str())
+        .unwrap_or("");
+    let repo = CString::new(workdir.to_string_lossy().as_bytes()).ok()?;
+    let rec = CString::new(recip).ok()?;
+
+    let ptr = unsafe {
+        match op {
+            "list" => {
+                let f = api.list?;
+                f(repo.as_ptr(), rec.as_ptr())
+            }
+            "status" => {
+                let f = api.status?;
+                f(repo.as_ptr(), rec.as_ptr())
+            }
+            "seal" => {
+                let f = api.seal?;
+                f(repo.as_ptr(), rec.as_ptr())
+            }
+            "unseal" => {
+                let f = api.unseal?;
+                let allow = if args.iter().any(|a| a == "--allow-unsigned") {
+                    1
+                } else {
+                    0
+                };
+                f(repo.as_ptr(), rec.as_ptr(), allow)
+            }
+            "add" => {
+                let f = api.add?;
+                let path = args.get(1)?;
+                let p = CString::new(path.as_str()).ok()?;
+                let ng = if args.iter().any(|a| a == "--no-gitignore") {
+                    1
+                } else {
+                    0
+                };
+                f(repo.as_ptr(), p.as_ptr(), rec.as_ptr(), ng)
+            }
+            "add-dir" => {
+                let f = api.add_dir?;
+                let path = args.get(1)?;
+                let p = CString::new(path.as_str()).ok()?;
+                let ng = if args.iter().any(|a| a == "--no-gitignore") {
+                    1
+                } else {
+                    0
+                };
+                f(repo.as_ptr(), p.as_ptr(), rec.as_ptr(), ng)
+            }
+            "rm" | "remove" => {
+                let f = api.remove3?;
+                let path = args.get(1)?;
+                let p = CString::new(path.as_str()).ok()?;
+                f(repo.as_ptr(), p.as_ptr(), rec.as_ptr())
+            }
+            "mv" => {
+                let f = api.mv?;
+                let old = args.get(1)?;
+                let newp = args.get(2)?;
+                let o = CString::new(old.as_str()).ok()?;
+                let n = CString::new(newp.as_str()).ok()?;
+                f(repo.as_ptr(), o.as_ptr(), n.as_ptr(), rec.as_ptr())
+            }
+            "scan" => {
+                let f = api.scan?;
+                let path = args.get(1).map(|s| s.as_str()).unwrap_or("");
+                let p = CString::new(path).ok()?;
+                f(repo.as_ptr(), p.as_ptr(), rec.as_ptr())
+            }
+            _ => return None,
+        }
+    };
+    Some(take(api, ptr))
 }

@@ -150,7 +150,7 @@ pub async fn run_nimvault_session(
     // In-process fast path for list/status when libnimvault.so is available.
     if tool == "list" || tool == "status" {
         let recip = args.windows(2).find(|w| w[0] == "--recipient").map(|w| w[1].as_str());
-        if let Some((ok, stdout, stderr)) = crate::inproc::try_inproc(tool, &workdir, recip) {
+        if let Some((ok, stdout, stderr)) = crate::inproc::try_inproc(args, &workdir) {
             return Ok(NimvaultOutput {
                 ok,
                 code: Some(if ok { 0 } else { 1 }),

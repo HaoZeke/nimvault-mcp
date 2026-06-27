@@ -104,7 +104,7 @@ pub fn format_doctor_report(cli_ok: bool, cli_detail: &str, gpg_hint: &str) -> S
             crate::inproc::lib_version().unwrap_or_else(|| "?".into())
         ));
     } else {
-        lines.push("libnimvault in-process: no (CLI spawn; build nimvault `nimble buildLib`, set NIMVAULT_LIB or install to ~/.local/lib)".into());
+        lines.push("libnimvault in-process: no (CLI fallback for missing symbols; build nimvault `nimble buildLib`, set NIMVAULT_LIB or install to ~/.local/lib)".into());
     }
     if !gpg_hint.is_empty() {
         lines.push(String::new());

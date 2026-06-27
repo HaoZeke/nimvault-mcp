@@ -99,3 +99,11 @@ use the CLI until more of the C API is exported (seal/unseal call `quit` paths).
 
 Build: `cd nimvault && nimble buildLib && cp lib/libnimvault.so ~/.local/lib/`
 
+
+### Tier D status (0.3.x)
+
+Full C ABI: `nv_list`, `nv_status`, `nv_seal`, `nv_unseal`, `nv_add`, `nv_add_dir`,
+`nv_remove`, `nv_mv`, `nv_scan` plus `nv_free` / `nv_last_error` / `nv_version`.
+MCP routes **every** tool through inproc when the symbol exists; CLI spawn is
+fallback only. Mutate still respects `NIMVAULT_MCP_ALLOW_MUTATE` / `READ_ONLY`
+before any library call.
