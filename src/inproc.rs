@@ -27,8 +27,6 @@ struct LibApi {
     unseal: Option<NvUnseal>,
     add: Option<NvAdd>,
     add_dir: Option<NvAdd>,
-    remove: Option<NvRR>, // repo, path, recipient — wait remove is repo, path, recipient = 3 cstrings
-    // redefine remove as 3-arg
     remove3: Option<unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char>,
     mv: Option<NvMv>,
     scan: Option<NvScan>,
@@ -94,7 +92,6 @@ fn load() -> Option<&'static LibApi> {
                     unseal,
                     add,
                     add_dir,
-                    remove: None,
                     remove3,
                     mv,
                     scan,

@@ -126,6 +126,7 @@ fn chrono_lite_now() -> String {
     format!("{secs}")
 }
 
+#[allow(dead_code)] // public helper for callers that skip sticky session
 pub async fn run_nimvault(
     args: &[String],
     repo_path: &Option<String>,
@@ -147,17 +148,14 @@ pub async fn run_nimvault_session(
     session.remember_root(workdir.clone());
     let tool = args.first().map(|s| s.as_str()).unwrap_or("?");
     audit(tool, &workdir, &args.join(" "));
-    // In-process fast path for list/status when libnimvault.so is available.
-    if tool == "list" || tool == "status" {
-        let recip = args.windows(2).find(|w| w[0] == "--recipient").map(|w| w[1].as_str());
-        if let Some((ok, stdout, stderr)) = crate::inproc::try_inproc(args, &workdir) {
-            return Ok(NimvaultOutput {
-                ok,
-                code: Some(if ok { 0 } else { 1 }),
-                stdout,
-                stderr,
-            });
-        }
+    // Prefer libnimvault for any op that has a symbol; CLI only if None / load miss.
+    if let Some((ok, stdout, stderr)) = crate::inproc::try_inproc(args, &workdir) {
+        return Ok(NimvaultOutput {
+            ok,
+            code: Some(if ok { 0 } else { 1 }),
+            stdout,
+            stderr,
+        });
     }
     run_nimvault_in(args, &workdir).await
 }
@@ -193,13 +191,29 @@ pub async fn run_nimvault_in(args: &[String], dir: &Path) -> Result<NimvaultOutp
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serialise env mutation across async tests in this module.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[tokio::test]
     async fn help_runs_if_installed() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // Avoid inheriting NIMVAULT_BIN trap from a sibling test that raced before locking.
+        let prev_bin = std::env::var_os("NIMVAULT_BIN");
+        std::env::remove_var("NIMVAULT_BIN");
         if which::which("nimvault").is_err() {
+            if let Some(v) = prev_bin {
+                std::env::set_var("NIMVAULT_BIN", v);
+            }
             return;
         }
         let o = run_nimvault_in(&["--help".into()], Path::new(".")).await.expect("run");
+        if let Some(v) = prev_bin {
+            std::env::set_var("NIMVAULT_BIN", v);
+        } else {
+            std::env::remove_var("NIMVAULT_BIN");
+        }
         let blob = format!("{}{}", o.stdout, o.stderr);
         assert!(
             blob.to_ascii_lowercase().contains("nimvault")
@@ -207,5 +221,138 @@ mod tests {
                 || blob.contains("seal"),
             "{blob}"
         );
+    }
+
+    /// MCP session path must use libnimvault for seal/add when loaded — prove by
+    /// pointing NIMVAULT_BIN at a trap that fails if the CLI is ever spawned.
+    #[tokio::test]
+    async fn session_mutate_uses_inproc_not_cli_spawn() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        struct RestoreEnv {
+            bin: Option<std::ffi::OsString>,
+            lib: Option<std::ffi::OsString>,
+        }
+        impl Drop for RestoreEnv {
+            fn drop(&mut self) {
+                match &self.bin {
+                    Some(v) => std::env::set_var("NIMVAULT_BIN", v),
+                    None => std::env::remove_var("NIMVAULT_BIN"),
+                }
+                match &self.lib {
+                    Some(v) => std::env::set_var("NIMVAULT_LIB", v),
+                    None => std::env::remove_var("NIMVAULT_LIB"),
+                }
+            }
+        }
+        let _restore = RestoreEnv {
+            bin: std::env::var_os("NIMVAULT_BIN"),
+            lib: std::env::var_os("NIMVAULT_LIB"),
+        };
+
+        let so = PathBuf::from("/home/rgoswami/Git/Github/Tools/nimvault/lib/libnimvault.so");
+        if !so.is_file() {
+            return; // skip without buildLib
+        }
+        // Prefer explicit path before any OnceLock load in this process.
+        std::env::set_var("NIMVAULT_LIB", so.as_os_str());
+        assert!(
+            crate::inproc::lib_loaded(),
+            "libnimvault must load from {}",
+            so.display()
+        );
+        let ver = crate::inproc::lib_version().unwrap_or_default();
+        assert!(
+            ver.contains("0.4") || ver.contains("lib"),
+            "unexpected lib version {ver}"
+        );
+
+        // Direct symbol path (no session) must bind seal/add.
+        let probe = crate::inproc::try_inproc(
+            &["seal".into()],
+            Path::new("/nonexistent/nv_probe_repo_xyz"),
+        );
+        assert!(
+            probe.is_some(),
+            "try_inproc(seal) must be Some when full ABI lib is loaded (got None => CLI fallback)"
+        );
+
+        let scratch = std::env::temp_dir().join(format!(
+            "nv_mcp_inproc_ev_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(scratch.join(".vault")).unwrap();
+        std::fs::write(
+            scratch.join(".vault/config"),
+            "recipient = test-no-such-key@invalid\n",
+        )
+        .unwrap();
+        let secret = scratch.join("secret.txt");
+        std::fs::write(&secret, "mcp-inproc-evidence\n").unwrap();
+
+        let trap = scratch.join("trap_nimvault.sh");
+        std::fs::write(
+            &trap,
+            "#!/bin/sh\necho TRAP_CLI_SPAWNED >&2\nexit 99\n",
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&trap).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&trap, perms).unwrap();
+        }
+
+        std::env::set_var("NIMVAULT_BIN", trap.as_os_str());
+
+        let session = crate::session::Session::new();
+        let repo = Some(scratch.to_string_lossy().into_owned());
+
+        // Unknown op falls through to CLI trap — proves trap would fire if used.
+        let miss = run_nimvault_session(
+            &session,
+            &["__not_a_real_op__".into()],
+            &repo,
+        )
+        .await
+        .expect("session returns even on trap");
+        assert!(
+            !miss.ok && miss.stderr.contains("TRAP_CLI_SPAWNED"),
+            "trap must run for unknown op; got ok={} stderr={}",
+            miss.ok,
+            miss.stderr
+        );
+
+        // list/status/seal/add must hit inproc (trap never runs).
+        for args in [
+            vec!["list".into()],
+            vec!["status".into()],
+            vec!["seal".into()],
+            vec![
+                "add".into(),
+                secret.to_string_lossy().into_owned(),
+                "--no-gitignore".into(),
+            ],
+        ] {
+            // Pre-check: inproc must claim the op (MCP session uses same try_inproc).
+            let direct = crate::inproc::try_inproc(&args, &scratch);
+            assert!(
+                direct.is_some(),
+                "try_inproc({:?}) returned None — CLI would be used",
+                args.first()
+            );
+            let o = run_nimvault_session(&session, &args, &repo)
+                .await
+                .expect("session");
+            let blob = format!("{}{}", o.stdout, o.stderr);
+            assert!(
+                !blob.contains("TRAP_CLI_SPAWNED"),
+                "op {:?} must not spawn CLI when lib loaded; output={blob}",
+                args.first()
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 }

@@ -91,19 +91,17 @@ ecosystem still needs stdio; the vault wants a **long-lived, multi-client, no-eg
 local server**. `serve --socket` is that step; HTTP loopback and in-process lib
 are the next rungs.
 
-## Tier D — in-process (partial, implemented)
-
-`libnimvault.so` exposes `nv_list` / `nv_status` (C ABI). nimvault-mcp **dlopen**s it
-when present (`NIMVAULT_LIB` or `~/.local/lib/libnimvault.so`). Mutate ops still
-use the CLI until more of the C API is exported (seal/unseal call `quit` paths).
+## Tier D — in-process (complete for MCP surface)
 
 Build: `cd nimvault && nimble buildLib && cp lib/libnimvault.so ~/.local/lib/`
-
-
-### Tier D status (0.3.x)
+(or set `NIMVAULT_LIB` to the `.so`).
 
 Full C ABI: `nv_list`, `nv_status`, `nv_seal`, `nv_unseal`, `nv_add`, `nv_add_dir`,
 `nv_remove`, `nv_mv`, `nv_scan` plus `nv_free` / `nv_last_error` / `nv_version`.
-MCP routes **every** tool through inproc when the symbol exists; CLI spawn is
-fallback only. Mutate still respects `NIMVAULT_MCP_ALLOW_MUTATE` / `READ_ONLY`
-before any library call.
+
+**MCP routing (`run_nimvault_session`):** for **every** op, call `inproc::try_inproc`
+first; if it returns `Some`, that result is used (success or library error text).
+Only if it returns `None` (no `.so` or unknown op) does the server spawn the
+`nimvault` CLI. Mutate tools still pass `NIMVAULT_MCP_ALLOW_MUTATE` / `READ_ONLY`
+**before** any library or CLI call. Library paths set `nvQuiet` so scan/seal do
+not write progress to the MCP host stdout.
