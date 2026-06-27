@@ -1,6 +1,6 @@
 [package]
 name = "nimvault-mcp"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "MCP server for nimvault (GPG opaque-blob vault: list, status, add, seal, unseal)"
@@ -11,7 +11,7 @@ keywords = ["mcp", "nimvault", "gpg", "secrets", "vault"]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
-rmcp = { version = "1.2", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "1.8", features = ["server", "transport-io", "transport-async-rw", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "1.0"

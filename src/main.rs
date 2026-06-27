@@ -1,14 +1,18 @@
 //! # nimvault-mcp
 //!
-//! MCP server for [nimvault](https://github.com/HaoZeke/nimvault). Design: `docs/ARCHITECTURE.md`.
+//! Default: MCP over **stdio** (agent hosts). Optional: **`serve --socket`** for a
+//! long-lived Unix-domain multi-client server — see `docs/TRANSPORTS.md`.
 
 mod cli;
 mod constants;
 mod doctor;
 mod policy;
+mod serve;
 mod server;
 mod setup;
 mod tool_args;
+
+use std::path::PathBuf;
 
 use rmcp::ServiceExt;
 
@@ -43,9 +47,18 @@ async fn main() -> anyhow::Result<()> {
         );
         return Ok(());
     }
+    if args.iter().any(|a| a == "serve") {
+        let socket = args
+            .windows(2)
+            .find(|w| w[0] == "--socket" || w[0] == "-s")
+            .map(|w| PathBuf::from(&w[1]))
+            .unwrap_or_else(serve::default_socket_path);
+        doctor::emit_startup_stderr();
+        return serve::run_unix_socket(socket).await;
+    }
 
+    // Default: stdio (Grok / Claude / Codex child process)
     doctor::emit_startup_stderr();
-
     let server = Server::new();
     let service = server.serve(rmcp::transport::io::stdio()).await?;
     service.waiting().await?;

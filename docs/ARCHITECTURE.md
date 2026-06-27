@@ -62,3 +62,13 @@ Bridges to **pass** / **KeePassXC** / **Enpass** belong as **import pipelines** 
 - Replacing Vault/1Password dynamic secrets
 - Returning decrypted file contents via MCP
 - Shelling out with interpolated secrets (always argv arrays / `Command`)
+
+## Transports (beyond ookcite-style stdio-only)
+
+See **`docs/TRANSPORTS.md`**. Summary:
+
+- **Default:** stdio (host spawns us) — required for most agents today.
+- **Better local multi-client:** `nimvault-mcp serve --socket $XDG_RUNTIME_DIR/nimvault-mcp.sock`
+  (Unix stream MCP sessions, mode 0600, one process).
+- **Not default:** Streamable HTTP (prefer loopback + token if ever enabled).
+- **Future:** in-process nimvault library to drop per-tool CLI spawn.
