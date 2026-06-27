@@ -37,15 +37,17 @@ impl Server {
     )]
     async fn nimvault_version(&self, Parameters(_a): Parameters<EmptyArgs>) -> String {
         let mcp = crate::constants::version_output();
-        match run_nimvault_session(&self.session, &["--version".into()], &None).await {
-            Ok(o) => format!("{mcp}\n{}", o.display()),
-            Err(e) => match run_nimvault_session(&self.session, &["--help".into()], &None).await {
-                Ok(o2) => format!(
-                    "{mcp}\n(no --version; help snippet)\n{}",
-                    trunc(&o2.display(), 500)
-                ),
-                Err(_) => format!("{mcp}\nERROR: {e}{}", &crate::doctor::install_help_block()),
-            },
+        let lib = crate::inproc::lib_version()
+            .map(|v| format!("libnimvault {v}"))
+            .unwrap_or_else(|| "libnimvault (not loaded)".into());
+        let (cli_ok, cli) = crate::cli::cli_identity().await;
+        if cli_ok {
+            format!("{mcp}\n{cli}\n{lib}")
+        } else {
+            format!(
+                "{mcp}\nCLI: {cli}\n{lib}{}",
+                &crate::doctor::install_help_block()
+            )
         }
     }
 
@@ -55,19 +57,7 @@ impl Server {
         annotations(title = "nimvault doctor", read_only_hint = true, idempotent_hint = true)
     )]
     async fn nimvault_doctor(&self, Parameters(_a): Parameters<EmptyArgs>) -> String {
-        let (cli_ok, detail) = match run_nimvault_session(&self.session, &["--help".into()], &None).await {
-            Ok(o) => {
-                let d = o.display();
-                let snippet = d.lines().take(3).collect::<Vec<_>>().join(" | ");
-                (
-                    o.ok
-                        || d.to_ascii_lowercase().contains("nimvault")
-                        || d.contains("SUBCMD"),
-                    snippet,
-                )
-            }
-            Err(e) => (false, e),
-        };
+        let (cli_ok, detail) = crate::cli::cli_identity().await;
         let gpg = if cli_ok {
             "GPG: ensure your agent can unlock the key in .vault/config (recipient). \
 status/seal/unseal need an unlocked agent on this host."

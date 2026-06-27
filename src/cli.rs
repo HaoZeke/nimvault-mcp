@@ -160,6 +160,56 @@ pub async fn run_nimvault_session(
     run_nimvault_in(args, &workdir).await
 }
 
+/// Probe CLI without requiring a vault workdir (version / help).
+pub async fn probe_cli(args: &[String]) -> Result<NimvaultOutput, String> {
+    let bin = resolve_bin()?;
+    let mut cmd = Command::new(&bin);
+    cmd.args(args);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn {}: {e}", bin.display()))?;
+    let out = timeout(Duration::from_secs(30), child.wait_with_output())
+        .await
+        .map_err(|_| "nimvault probe timed out".to_string())?
+        .map_err(|e| format!("nimvault wait failed: {e}"))?;
+    Ok(NimvaultOutput {
+        ok: out.status.success(),
+        code: out.status.code(),
+        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+    })
+}
+
+/// Human-readable CLI identity for doctor / version tools.
+pub async fn cli_identity() -> (bool, String) {
+    let bin = match resolve_bin() {
+        Ok(p) => p,
+        Err(e) => return (false, e),
+    };
+    let path = bin.display().to_string();
+    match probe_cli(&["--version".into()]).await {
+        Ok(o) => {
+            let blob = format!("{}{}", o.stdout, o.stderr);
+            let line = blob
+                .lines()
+                .find(|l| l.to_ascii_lowercase().contains("nimvault"))
+                .or_else(|| blob.lines().next())
+                .unwrap_or("")
+                .trim();
+            if line.is_empty() || line.eq_ignore_ascii_case("unknown version") {
+                (true, format!("{path} (version string missing; binary OK)"))
+            } else {
+                (true, format!("{path} — {line}"))
+            }
+        }
+        Err(e) => (false, format!("{path}: {e}")),
+    }
+}
+
 pub async fn run_nimvault_in(args: &[String], dir: &Path) -> Result<NimvaultOutput, String> {
     let bin = resolve_bin()?;
     let mut cmd = Command::new(&bin);

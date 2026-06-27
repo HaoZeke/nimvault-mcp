@@ -33,21 +33,13 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     if args.iter().any(|a| a == "doctor") {
-        let (cli_ok, detail) = match which::which("nimvault") {
-            Ok(p) => (true, p.display().to_string()),
-            Err(_) => (
-                false,
-                "not on PATH (set NIMVAULT_BIN or install nimvault)".into(),
-            ),
+        let (cli_ok, detail) = cli::cli_identity().await;
+        let gpg = if cli_ok {
+            "Use MCP tool nimvault_doctor when connected."
+        } else {
+            ""
         };
-        println!(
-            "{}",
-            doctor::format_doctor_report(
-                cli_ok,
-                &detail,
-                "Use MCP tool nimvault_doctor when connected."
-            )
-        );
+        println!("{}", doctor::format_doctor_report(cli_ok, &detail, gpg));
         return Ok(());
     }
     if args.iter().any(|a| a == "serve") {

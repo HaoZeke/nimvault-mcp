@@ -1,4 +1,9 @@
 # Changelog
+## 0.3.4
+
+- CLI identity probe: real nimvault --version; doctor no longer dumps cligen help
+- nimvault_version reports MCP + CLI path/version + libnimvault
+
 ## 0.3.3
 
 - Windows release build: gate UDS `serve` on `cfg(unix)` (stdio MCP works everywhere)
