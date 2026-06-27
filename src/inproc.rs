@@ -38,8 +38,8 @@ fn candidate_paths() -> Vec<PathBuf> {
     }
     v.push(PathBuf::from("lib/libnimvault.so"));
     if let Ok(h) = std::env::var("HOME") {
-        v.push(PathBuf::from(h).join(".local/lib/libnimvault.so"));
-        v.push(PathBuf::from(h).join("Git/Github/Tools/nimvault/lib/libnimvault.so"));
+        v.push(PathBuf::from(&h).join(".local/lib/libnimvault.so"));
+        v.push(PathBuf::from(&h).join("Git/Github/Tools/nimvault/lib/libnimvault.so"));
     }
     v.push(PathBuf::from("/usr/local/lib/libnimvault.so"));
     v
