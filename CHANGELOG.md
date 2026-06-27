@@ -1,4 +1,9 @@
 # Changelog
+## 0.3.3
+
+- Windows release build: gate UDS `serve` on `cfg(unix)` (stdio MCP works everywhere)
+- Completes multi-arch matrix including `x86_64-pc-windows-msvc`
+
 ## 0.3.2
 
 - Route every vault op through libnimvault when loaded (CLI fallback only if missing)

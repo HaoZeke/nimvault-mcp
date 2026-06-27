@@ -7,6 +7,7 @@ mod cli;
 mod constants;
 mod doctor;
 mod policy;
+#[cfg(unix)]
 mod serve;
 mod server;
 mod session;
@@ -50,17 +51,27 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     if args.iter().any(|a| a == "serve") {
-        let socket = args
-            .windows(2)
-            .find(|w| w[0] == "--socket" || w[0] == "-s")
-            .map(|w| PathBuf::from(&w[1]))
-            .unwrap_or_else(serve::default_socket_path);
-        if args.iter().any(|a| a == "--print-unit") {
-            print!("{}", serve::systemd_unit_example(&socket));
-            return Ok(());
+        #[cfg(unix)]
+        {
+            let socket = args
+                .windows(2)
+                .find(|w| w[0] == "--socket" || w[0] == "-s")
+                .map(|w| PathBuf::from(&w[1]))
+                .unwrap_or_else(serve::default_socket_path);
+            if args.iter().any(|a| a == "--print-unit") {
+                print!("{}", serve::systemd_unit_example(&socket));
+                return Ok(());
+            }
+            doctor::emit_startup_stderr();
+            return serve::run_unix_socket(socket).await;
         }
-        doctor::emit_startup_stderr();
-        return serve::run_unix_socket(socket).await;
+        #[cfg(not(unix))]
+        {
+            let _ = PathBuf::new();
+            anyhow::bail!(
+                "serve --socket (Unix domain MCP) is not supported on this OS; use stdio MCP"
+            );
+        }
     }
 
     doctor::emit_startup_stderr();

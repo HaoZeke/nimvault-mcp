@@ -2,6 +2,10 @@
 //!
 //! Each accepted connection runs a full MCP session over the stream (rmcp async-rw).
 //! Socket mode 0o600. No network bind.
+//!
+//! Compiled on Unix only (`main` gates `serve` on non-Unix).
+
+#![cfg(unix)]
 
 use std::path::{Path, PathBuf};
 
