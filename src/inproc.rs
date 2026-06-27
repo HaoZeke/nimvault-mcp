@@ -1,16 +1,12 @@
 //! Optional in-process nimvault via libnimvault.so (dlopen).
-//!
-//! Set `NIMVAULT_LIB` to the .so path, or we try common locations.
-//! Falls back to CLI spawn when the library is missing.
+//! Set `NIMVAULT_LIB` or install to `~/.local/lib/libnimvault.so`.
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use libloading::{Library, Symbol};
-
-use crate::cli::NimvaultOutput;
+use libloading::Library;
 
 type NvListFn = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_char;
 type NvStatusFn = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_char;
@@ -27,7 +23,7 @@ struct LibApi {
     version: NvVersionFn,
 }
 
-static API: OnceLock<Option<LibApi>> = OnceLock::new();
+static API: OnceLock<Option<&'static LibApi>> = OnceLock::new();
 
 fn candidate_paths() -> Vec<PathBuf> {
     let mut v = Vec::new();
@@ -41,66 +37,43 @@ fn candidate_paths() -> Vec<PathBuf> {
         }
     }
     v.push(PathBuf::from("lib/libnimvault.so"));
-    v.push(PathBuf::from("/home/rgoswami/Git/Github/Tools/nimvault/lib/libnimvault.so"));
     if let Ok(h) = std::env::var("HOME") {
         v.push(PathBuf::from(h).join(".local/lib/libnimvault.so"));
+        v.push(PathBuf::from(h).join("Git/Github/Tools/nimvault/lib/libnimvault.so"));
     }
     v.push(PathBuf::from("/usr/local/lib/libnimvault.so"));
     v
 }
 
 fn load() -> Option<&'static LibApi> {
-    API.get_or_init(|| {
+    *API.get_or_init(|| {
         for path in candidate_paths() {
             if !path.is_file() {
                 continue;
             }
-            // Safety: we only load our own built library.
             let lib = match unsafe { Library::new(&path) } {
                 Ok(l) => l,
                 Err(_) => continue,
             };
             unsafe {
-                let list: Symbol<NvListFn> = match lib.get(b"nv_list\0") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let status: Symbol<NvStatusFn> = match lib.get(b"nv_status\0") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let free: Symbol<NvFreeFn> = match lib.get(b"nv_free\0") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let last_error: Symbol<NvLastErrorFn> = match lib.get(b"nv_last_error\0") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let version: Symbol<NvVersionFn> = match lib.get(b"nv_version\0") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                // Leak library into static (process lifetime)
-                let list = *list;
-                let status = *status;
-                let free = *free;
-                let last_error = *last_error;
-                let version = *version;
-                let boxed = Box::new(LibApi {
+                let Ok(list) = lib.get::<NvListFn>(b"nv_list\0") else { continue };
+                let Ok(status) = lib.get::<NvStatusFn>(b"nv_status\0") else { continue };
+                let Ok(free) = lib.get::<NvFreeFn>(b"nv_free\0") else { continue };
+                let Ok(last_error) = lib.get::<NvLastErrorFn>(b"nv_last_error\0") else { continue };
+                let Ok(version) = lib.get::<NvVersionFn>(b"nv_version\0") else { continue };
+                let api = LibApi {
+                    list: *list,
+                    status: *status,
+                    free: *free,
+                    last_error: *last_error,
+                    version: *version,
                     _lib: lib,
-                    list,
-                    status,
-                    free,
-                    last_error,
-                    version,
-                });
-                return Some(Box::leak(boxed));
+                };
+                return Some(Box::leak(Box::new(api)));
             }
         }
         None
     })
-    .as_ref()
 }
 
 pub fn lib_loaded() -> bool {
@@ -118,29 +91,8 @@ pub fn lib_version() -> Option<String> {
     }
 }
 
-fn take_c_string(api: &LibApi, ptr: *mut c_char) -> Result<String, String> {
-    if ptr.is_null() {
-        let err = unsafe { (api.last_error)() };
-        let msg = if err.is_null() {
-            "libnimvault returned null".into()
-        } else {
-            unsafe { CStr::from_ptr(err).to_string_lossy().into_owned() }
-        };
-        return Err(msg);
-    }
-    let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
-    unsafe {
-        (api.free)(ptr as *mut std::ffi::c_void);
-    }
-    Ok(s)
-}
-
-/// Run list/status in-process. Other commands return None → CLI fallback.
-pub fn try_inproc(
-    op: &str,
-    workdir: &Path,
-    recipient: Option<&str>,
-) -> Option<Result<NimvaultOutput, String>> {
+/// Returns (ok, stdout, stderr) for list/status; None if lib missing or op unsupported.
+pub fn try_inproc(op: &str, workdir: &Path, recipient: Option<&str>) -> Option<(bool, String, String)> {
     let api = load()?;
     if op != "list" && op != "status" {
         return None;
@@ -154,19 +106,18 @@ pub fn try_inproc(
             (api.status)(repo.as_ptr(), rec.as_ptr())
         }
     };
-    let out = match take_c_string(api, ptr) {
-        Ok(stdout) => Ok(NimvaultOutput {
-            ok: true,
-            code: Some(0),
-            stdout,
-            stderr: String::new(),
-        }),
-        Err(e) => Ok(NimvaultOutput {
-            ok: false,
-            code: Some(1),
-            stdout: String::new(),
-            stderr: e,
-        }),
-    };
-    Some(out)
+    if ptr.is_null() {
+        let err = unsafe { (api.last_error)() };
+        let msg = if err.is_null() {
+            "libnimvault error".into()
+        } else {
+            unsafe { CStr::from_ptr(err).to_string_lossy().into_owned() }
+        };
+        return Some((false, String::new(), msg));
+    }
+    let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
+    unsafe {
+        (api.free)(ptr as *mut std::ffi::c_void);
+    }
+    Some((true, s, String::new()))
 }
