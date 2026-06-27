@@ -1,10 +1,9 @@
 //! nimvault-mcp library surface (testable edges).
-//!
-//! Binary modules (`main`, `server`, `setup`, …) live beside this crate root in
-//! `src/` and are wired from `main.rs`. See `docs/ARCHITECTURE.md`.
+//! See `docs/ARCHITECTURE.md` and `docs/TRANSPORTS.md`.
 
 pub mod constants;
 pub mod doctor;
+pub mod inproc;
 pub mod policy;
 
 pub use constants::{VERSION, version_output};

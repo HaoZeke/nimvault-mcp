@@ -2,3 +2,4 @@
 /npm/bin/nimvault-mcp
 /npm/bin/nimvault-mcp.exe
 *.tar
+lib/*.so
