@@ -222,3 +222,39 @@ pub fn try_inproc(args: &[String], workdir: &Path) -> Option<(bool, String, Stri
     };
     Some(take(api, ptr))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn try_inproc_unknown_op_is_none_or_err() {
+        // Without lib, None; with lib, unknown op returns None (CLI fallback).
+        let r = try_inproc(&["not-a-real-op".into()], Path::new("/tmp"));
+        assert!(r.is_none(), "unknown op must not claim inproc success");
+    }
+
+    #[test]
+    fn try_inproc_bad_repo_errors_without_panic() {
+        let lib = std::env::var("NIMVAULT_LIB").ok().filter(|p| Path::new(p).is_file());
+        if lib.is_none() && !Path::new("/home/rgoswami/Git/Github/Tools/nimvault/lib/libnimvault.so").is_file() {
+            return; // skip if no .so in CI without buildLib
+        }
+        if lib.is_none() {
+            std::env::set_var(
+                "NIMVAULT_LIB",
+                "/home/rgoswami/Git/Github/Tools/nimvault/lib/libnimvault.so",
+            );
+        }
+        // Reset OnceLock not possible; rely on env set before first load in this process.
+        let r = try_inproc(
+            &["list".into()],
+            Path::new("/nonexistent/nimvault_lib_test_repo"),
+        );
+        if let Some((ok, _o, err)) = r {
+            assert!(!ok, "bad repo must fail");
+            assert!(!err.is_empty(), "error text required");
+        }
+    }
+}
