@@ -1,4 +1,10 @@
 # Changelog
+## 0.3.6
+
+- Release build step uses bash on every OS so the cargo retry loop is not
+  PowerShell on Windows
+- Matrix fail-fast is off so one OS cannot cancel the others
+
 ## 0.3.5
 
 - Windows release-asset version smoke on a schedule
