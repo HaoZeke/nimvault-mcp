@@ -1,0 +1,27 @@
+name: Windows release asset smoke
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Download latest Windows zip and print version
+        shell: pwsh
+        run: |
+          $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/HaoZeke/nimvault-mcp/releases/latest"
+          $asset = $rel.assets | Where-Object { $_.name -like "*windows-msvc.zip" } | Select-Object -First 1
+          if (-not $asset) { throw "no windows-msvc.zip on latest release" }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile nv.zip
+          Expand-Archive nv.zip -DestinationPath .
+          $exe = Get-ChildItem -Recurse -Filter nimvault-mcp.exe | Select-Object -First 1
+          & $exe.FullName --version
