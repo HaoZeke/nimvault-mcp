@@ -8,8 +8,7 @@ This repo is the **plugin source**; the marketplace PR only adds a catalog entry
 | | |
 |--|--|
 | **Git** | https://github.com/HaoZeke/nimvault-mcp |
-| **Local clone** | `/home/rgoswami/Git/Github/Tools/nimvault-mcp` (this machine) |
-| **Binary (dev)** | `~/.local/bin/nimvault-mcp` after `cargo install --path .` |
+| **Binary (dev)** | cargo install from this repository |
 
 ## Catalog entry (paste into marketplace fork)
 
@@ -23,7 +22,7 @@ Add to `.grok-plugin/marketplace.json` → `plugins` array (pin **full** SHA):
   "source": {
     "source": "url",
     "url": "https://github.com/HaoZeke/nimvault-mcp.git",
-    "sha": "b56504dee786bf398c7a6a4d1d1c48010d6984de"
+    "sha": "fd53ff1752b56464ed1271221ee3a2f99a9caab1"
   },
   "homepage": "https://github.com/HaoZeke/nimvault-mcp",
   "keywords": ["nimvault", "nimvault mcp", "opaque-blob", "gpg vault"],
@@ -55,7 +54,7 @@ python3 scripts/generate-plugin-index.py --check
 ```bash
 grok plugin install https://github.com/HaoZeke/nimvault-mcp.git --trust
 # or path:
-grok plugin install /home/rgoswami/Git/Github/Tools/nimvault-mcp --trust
+grok plugin install . --trust
 ```
 
 Requires `nimvault` CLI on PATH (`nimble install nimvault`) and preferably `nimvault-mcp` on PATH for fast startup (launcher falls back to `cargo run --release`).
