@@ -1,4 +1,11 @@
 # Changelog
+## 0.3.5
+
+- Windows release-asset version smoke on a schedule
+- 2026-09 survey revisit (official Vault MCP returns secret values)
+- Marketplace pin to current main; drop a machine-local clone path
+- Release builds retry cargo fetch on transient crates.io resets
+
 ## 0.3.4
 
 - CLI identity probe: real nimvault --version; doctor no longer dumps cligen help

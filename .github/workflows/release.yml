@@ -47,7 +47,13 @@ jobs:
       - name: Build
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --target ${{ matrix.target }}
+        run: |
+          for i in 1 2 3; do
+            cargo build --release --target ${{ matrix.target }} && exit 0
+            echo "cargo build failed (attempt $i); retrying"
+            sleep 15
+          done
+          exit 1
 
       - name: Package (unix)
         if: runner.os != 'Windows'
