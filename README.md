@@ -136,14 +136,17 @@ git tag v0.1.2
 git push origin main --tags
 ```
 
-Optional repo secrets for the same workflow:
+Optional repo secrets for the same workflow (must be live tokens, not
+stubs: crates.io `cio_…`, npm granular `npm_…` for `@haozeke/nimvault-mcp`).
+A present-but-invalid token fails the publish jobs. Retry without a new tag
+via **Actions → Publish registries**.
 
 | Secret | Effect |
 |--------|--------|
 | `CARGO_REGISTRY_TOKEN` | `cargo publish` to crates.io |
 | `NPM_TOKEN` | `npm publish` `@haozeke/nimvault-mcp` |
 
-Without those secrets, **GitHub Release assets still publish** — enough for
-`cargo binstall nimvault-mcp` once the crate is on crates.io, or direct tarball
-download. The MCP `nimvault_doctor` tool points users at Releases if the binary
-is missing.
+Without those secrets, **GitHub Release assets still publish**. Direct
+tarball download and `npx` from the GitHub Release work today;
+`cargo binstall nimvault-mcp` needs the crate on crates.io. The MCP
+`nimvault_doctor` tool points users at Releases if the binary is missing.

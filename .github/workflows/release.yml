@@ -100,15 +100,13 @@ jobs:
             exit 0
           fi
           VERSION="${GITHUB_REF_NAME#v}"
-          if curl -fsS "https://crates.io/api/v1/crates/nimvault-mcp/$VERSION" >/dev/null; then
+          if curl -fsS -A "nimvault-mcp-release" \
+            "https://crates.io/api/v1/crates/nimvault-mcp/$VERSION" >/dev/null; then
             echo "Version $VERSION already on crates.io, skipping"
             exit 0
           fi
-          # Bad/expired token must not fail the Release (GitHub assets are the primary install path).
-          cargo publish --allow-dirty || {
-            echo "cargo publish failed (token or registry); GitHub Release assets remain valid"
-            exit 0
-          }
+          # Token is present: a failed publish is a defect, not a skip.
+          cargo publish --allow-dirty
 
   npm-publish:
     name: Publish to npm
@@ -138,4 +136,4 @@ jobs:
             }
             exit 0
           fi
-          npm publish --access public || true
+          npm publish --access public
