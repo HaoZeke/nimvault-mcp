@@ -37,7 +37,11 @@ main ──► setup | doctor(cli) | MCP stdio
 
 1. **Port over SDK** — talk to the **nimvault CLI** as the system of record (one crypto implementation). No second GPG stack in Rust unless we extract a shared library later.
 2. **Policy before spawn** — every mutating tool checks `policy::mutate_allowed()`; read-only lock wins.
-3. **No secret egress** — tools return CLI **metadata/status** only; never `cat` vaulted plaintext into the model context.
+3. **Shape and size only** — every tool result the agent, the model, and
+   the web see is metadata: path, id, rule, line, byte size, sync state,
+   recipient id. Never file bodies, scan snippets, DEKs, PEM, or token
+   literals. `policy::agent_view` is the last hop on every egress,
+   including FAILED. There is no `get` tool.
 4. **CWD is hostile** — `runner::resolve_workdir` is explicit → `NIMVAULT_DEFAULT_REPO` → walk-up `.vault`; never assume agent CWD is the vault root without discovery.
 5. **Fail loud with install path** — CLI missing / no repo → structured help (doctor block), not a one-line errno.
 6. **Observability without leakage** — optional append-only audit: timestamp, tool, workdir, argv summary; never file bodies.

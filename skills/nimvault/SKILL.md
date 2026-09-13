@@ -46,7 +46,8 @@ CLI docs: https://nimvault.rgoswami.me
 
 ## Security (survey-aligned)
 
-- Prefer **status/list/scan/doctor/resolve_repo** — never ask the model to print vaulted file contents (no such tool exists).
+- **Shape and size only.** MCP results may name a path, an id, a rule, a line number, a byte size, and a sync state. They never include file bodies, PEM, tokens, or DEKs. Do not run `nimvault get` in the shell for the model.
+- Prefer **status/list/scan/doctor/resolve_repo**. There is no get tool.
 - Mutate only with explicit user intent + `NIMVAULT_MCP_ALLOW_MUTATE=1`; use `NIMVAULT_MCP_READ_ONLY=1` on shared agents.
 - Optional `NIMVAULT_MCP_AUDIT_LOG` records tool name + paths only.
 - See `docs/SURVEY.md` for how this differs from Vault / 1Password / sops MCP patterns.

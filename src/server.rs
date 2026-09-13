@@ -11,7 +11,11 @@ use rmcp::{
 
 use crate::cli::{run_nimvault_session, resolve_workdir};
 use crate::doctor::{format_doctor_report, server_instructions};
-use crate::policy::{enrich_error as err_help, ensure_mutate, push_recipient, trunc};
+use crate::policy::{agent_view, enrich_error as err_help, ensure_mutate, push_recipient, trunc};
+
+fn to_agent(s: impl AsRef<str>) -> String {
+    agent_view(s.as_ref())
+}
 use crate::tool_args::*;
 
 #[derive(Clone)]
@@ -42,12 +46,12 @@ impl Server {
             .unwrap_or_else(|| "libnimvault (not loaded)".into());
         let (cli_ok, cli) = crate::cli::cli_identity().await;
         if cli_ok {
-            format!("{mcp}\n{cli}\n{lib}")
+            to_agent(format!("{mcp}\n{cli}\n{lib}"))
         } else {
-            format!(
+            to_agent(format!(
                 "{mcp}\nCLI: {cli}\n{lib}{}",
                 &crate::doctor::install_help_block()
-            )
+            ))
         }
     }
 
@@ -64,19 +68,19 @@ status/seal/unseal need an unlocked agent on this host."
         } else {
             ""
         };
-        format_doctor_report(cli_ok, &detail, gpg)
+        to_agent(format_doctor_report(cli_ok, &detail, gpg))
     }
 
 
     #[tool(
         name = "nimvault_list",
-        description = "List all vault entries (opaque id + target path). Requires repo_path with `.vault/`.",
+        description = "List vault entries as opaque id + path (shape only; never contents).",
         annotations(title = "nimvault list", read_only_hint = true, idempotent_hint = true)
     )]
     async fn nimvault_list(&self, Parameters(a): Parameters<RepoArgs>) -> String {
         match run_nimvault_session(&self.session, &["list".into()], &a.repo_path).await {
-            Ok(o) if o.ok => trunc(&o.display(), 48_000),
-            Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
+            Ok(o) if o.ok => to_agent(trunc(&o.display(), 48_000)),
+            Ok(o) => to_agent(format!("FAILED\n{}", trunc(&o.display(), 8_000))),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -88,15 +92,15 @@ status/seal/unseal need an unlocked agent on this host."
     )]
     async fn nimvault_status(&self, Parameters(a): Parameters<RepoArgs>) -> String {
         match run_nimvault_session(&self.session, &["status".into()], &a.repo_path).await {
-            Ok(o) if o.ok => trunc(&o.display(), 48_000),
-            Ok(o) => format!("FAILED (GPG/agent?)\n{}", trunc(&o.display(), 8_000)),
+            Ok(o) if o.ok => to_agent(trunc(&o.display(), 48_000)),
+            Ok(o) => to_agent(format!("FAILED (GPG/agent?)\n{}", trunc(&o.display(), 8_000))),
             Err(e) => err_help(e.as_str()),
         }
     }
 
     #[tool(
         name = "nimvault_scan",
-        description = "Scan for unvaulted secret-like files (`nimvault scan`). Read-only.",
+        description = "Scan for unvaulted secret-like files. Returns path, rule, line, and byte size only — never file contents.",
         annotations(title = "nimvault scan", read_only_hint = true, idempotent_hint = true)
     )]
     async fn nimvault_scan(&self, Parameters(a): Parameters<ScanArgs>) -> String {
@@ -117,10 +121,10 @@ status/seal/unseal need an unlocked agent on this host."
                         .map(|(c, r)| c.starts_with(r))
                         .unwrap_or(false);
                     if !inside {
-                        return format!(
+                        return to_agent(format!(
                             "path must stay under repo_path ({})",
                             root.display()
-                        );
+                        ));
                     }
                     args.push(joined.to_string_lossy().into_owned());
                 }
@@ -128,7 +132,7 @@ status/seal/unseal need an unlocked agent on this host."
             }
         }
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) => trunc(&o.display(), 48_000),
+            Ok(o) => to_agent(trunc(&o.display(), 48_000)),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -140,7 +144,7 @@ status/seal/unseal need an unlocked agent on this host."
     )]
     async fn nimvault_add(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
         if let Err(m) = ensure_mutate() {
-            return m;
+            return to_agent(m);
         }
         let mut args = vec!["add".into(), a.path.clone()];
         push_recipient(&mut args, &a.recipient);
@@ -148,8 +152,8 @@ status/seal/unseal need an unlocked agent on this host."
             args.push("--no-gitignore".into());
         }
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => o.display(),
-            Ok(o) => format!("FAILED\n{}", o.display()),
+            Ok(o) if o.ok => to_agent(o.display()),
+            Ok(o) => to_agent(format!("FAILED\n{}", o.display())),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -161,7 +165,7 @@ status/seal/unseal need an unlocked agent on this host."
     )]
     async fn nimvault_add_dir(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
         if let Err(m) = ensure_mutate() {
-            return m;
+            return to_agent(m);
         }
         let mut args = vec!["add-dir".into(), a.path.clone()];
         push_recipient(&mut args, &a.recipient);
@@ -169,8 +173,8 @@ status/seal/unseal need an unlocked agent on this host."
             args.push("--no-gitignore".into());
         }
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => o.display(),
-            Ok(o) => format!("FAILED\n{}", o.display()),
+            Ok(o) if o.ok => to_agent(o.display()),
+            Ok(o) => to_agent(format!("FAILED\n{}", o.display())),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -182,13 +186,13 @@ status/seal/unseal need an unlocked agent on this host."
     )]
     async fn nimvault_remove(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
         if let Err(m) = ensure_mutate() {
-            return m;
+            return to_agent(m);
         }
         let mut args = vec!["remove".into(), a.path.clone()];
         push_recipient(&mut args, &a.recipient);
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => o.display(),
-            Ok(o) => format!("FAILED\n{}", o.display()),
+            Ok(o) if o.ok => to_agent(o.display()),
+            Ok(o) => to_agent(format!("FAILED\n{}", o.display())),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -200,13 +204,13 @@ status/seal/unseal need an unlocked agent on this host."
     )]
     async fn nimvault_seal(&self, Parameters(a): Parameters<SealArgs>) -> String {
         if let Err(m) = ensure_mutate() {
-            return m;
+            return to_agent(m);
         }
         let mut args = vec!["seal".into()];
         push_recipient(&mut args, &a.recipient);
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => trunc(&o.display(), 32_000),
-            Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
+            Ok(o) if o.ok => to_agent(trunc(&o.display(), 32_000)),
+            Ok(o) => to_agent(format!("FAILED\n{}", trunc(&o.display(), 8_000))),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -218,7 +222,7 @@ status/seal/unseal need an unlocked agent on this host."
     )]
     async fn nimvault_unseal(&self, Parameters(a): Parameters<UnsealArgs>) -> String {
         if let Err(m) = ensure_mutate() {
-            return m;
+            return to_agent(m);
         }
         let mut args = vec!["unseal".into()];
         if a.allow_unsigned.unwrap_or(false) {
@@ -226,8 +230,8 @@ status/seal/unseal need an unlocked agent on this host."
         }
         push_recipient(&mut args, &a.recipient);
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => trunc(&o.display(), 32_000),
-            Ok(o) => format!("FAILED\n{}", trunc(&o.display(), 8_000)),
+            Ok(o) if o.ok => to_agent(trunc(&o.display(), 32_000)),
+            Ok(o) => to_agent(format!("FAILED\n{}", trunc(&o.display(), 8_000))),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -239,14 +243,13 @@ status/seal/unseal need an unlocked agent on this host."
     )]
     async fn nimvault_mv(&self, Parameters(a): Parameters<MoveArgs>) -> String {
         if let Err(m) = ensure_mutate() {
-            return m;
+            return to_agent(m);
         }
         let mut args = vec!["mv".into(), a.old_path.clone(), a.new_path.clone()];
         push_recipient(&mut args, &a.recipient);
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => o.display(),
-            Ok(o) => format!("FAILED
-{}", o.display()),
+            Ok(o) if o.ok => to_agent(o.display()),
+            Ok(o) => to_agent(format!("FAILED\n{}", o.display())),
             Err(e) => err_help(e.as_str()),
         }
     }
@@ -261,15 +264,12 @@ status/seal/unseal need an unlocked agent on this host."
         match resolve_workdir(&effective) {
             Ok(p) => {
                 self.session.remember_root(p.clone());
-                format!(
-                    "repo_path={}
-sticky=yes
-has_vault_config={}
-has_manifest={}",
+                to_agent(format!(
+                    "repo_path={}\nsticky=yes\nhas_vault_config={}\nhas_manifest={}",
                     p.display(),
                     p.join(".vault/config").is_file(),
                     p.join(".vault/manifest.gpg").is_file()
-                )
+                ))
             }
             Err(e) => err_help(e.as_str()),
         }

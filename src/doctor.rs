@@ -28,8 +28,10 @@ pub fn server_instructions() -> String {
          **Every tool call:** pass `repo_path` = git root that owns `.vault/` \
          (or set env `NIMVAULT_DEFAULT_REPO`). nimvault is CWD-sensitive.\n\n\
          **Safety:** mutating tools (add/add_dir/remove/seal/unseal) are BLOCKED unless \
-         `NIMVAULT_MCP_ALLOW_MUTATE=1`. Prefer list/status/scan. Never commit plaintext secrets; \
-         only commit `.vault/*.gpg` after seal.\n\n\
+         `NIMVAULT_MCP_ALLOW_MUTATE=1`. Tool results are shape and size only \
+         (path, id, rule, line, bytes, sync state). Never file contents, PEM, \
+         or token literals — there is no get tool. Prefer list/status/scan. \
+         Never commit plaintext secrets; only commit `.vault/*.gpg` after seal.\n\n\
          **Performance:** nimvault CLI >= 0.4.1 + one `seal` stores content hashes so status is fast.\n\n\
          **Clients:** Claude `claude mcp add nimvault -- nimvault-mcp`; \
          Codex `codex mcp add nimvault -- nimvault-mcp`; \
