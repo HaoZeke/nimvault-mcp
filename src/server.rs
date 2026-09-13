@@ -102,7 +102,30 @@ status/seal/unseal need an unlocked agent on this host."
     async fn nimvault_scan(&self, Parameters(a): Parameters<ScanArgs>) -> String {
         let mut args = vec!["scan".into()];
         if let Some(p) = a.path.filter(|s| !s.is_empty()) {
-            args.push(p);
+            match resolve_workdir(&a.repo_path) {
+                Ok(root) => {
+                    let cand = std::path::Path::new(&p);
+                    let joined = if cand.is_absolute() {
+                        cand.to_path_buf()
+                    } else {
+                        root.join(cand)
+                    };
+                    let inside = joined
+                        .canonicalize()
+                        .ok()
+                        .zip(root.canonicalize().ok())
+                        .map(|(c, r)| c.starts_with(r))
+                        .unwrap_or(false);
+                    if !inside {
+                        return format!(
+                            "path must stay under repo_path ({})",
+                            root.display()
+                        );
+                    }
+                    args.push(joined.to_string_lossy().into_owned());
+                }
+                Err(e) => return err_help(&e),
+            }
         }
         match run_nimvault_session(&self.session, &args, &a.repo_path).await {
             Ok(o) => trunc(&o.display(), 48_000),
