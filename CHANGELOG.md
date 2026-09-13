@@ -1,4 +1,10 @@
 # Changelog
+## 0.3.7
+
+- Tool results are shape and size only (agent_view on every egress)
+- Scan path must stay under repo_path; catalog pin matches 0.3.6+
+- Publish jobs fail when a token is present but dead
+
 ## 0.3.6
 
 - Release build step uses bash on every OS so the cargo retry loop is not
