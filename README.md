@@ -86,13 +86,20 @@ codex mcp add nimvault \
 |------|----------|-------------|
 | `nimvault_version` | no | MCP + CLI version |
 | `nimvault_list` | no | List vault entries |
-| `nimvault_status` | no | Sync status vs disk (fast with CLI ≥0.4.1 + sealed v4 manifest) |
-| `nimvault_scan` | no | Find unvaulted secrets |
-| `nimvault_add` | **yes** | Add file (`NIMVAULT_MCP_ALLOW_MUTATE=1`) |
+| `nimvault_status` | no | JSON sync state per entry (in-sync, modified, missing, no-blob, error) |
+| `nimvault_who` | no | JSON recipients per entry |
+| `nimvault_check` | no | JSON blob-vs-manifest check; decrypts nothing |
+| `nimvault_doctor` | no | JSON vault doctor plus MCP readiness |
+| `nimvault_scan` | no | Find unvaulted secrets (path, rule, line, size only) |
+| `nimvault_add` | **yes** | Add file (`path` required; `NIMVAULT_MCP_ALLOW_MUTATE=1`) |
 | `nimvault_add_dir` | **yes** | Add directory recursively |
 | `nimvault_remove` | **yes** | Drop manifest entry |
-| `nimvault_seal` | **yes** | Re-encrypt all entries |
-| `nimvault_unseal` | **yes** | Decrypt all entries |
+| `nimvault_seal` | **yes** | Seal; `force` required (false = changed files only) |
+| `nimvault_rotate` | **yes** | Rotate; `rekey` required (false = rewrap keys only) |
+| `nimvault_unseal` | **yes** | Decrypt all entries to disk |
+| `nimvault_mv` | **yes** | Rename a vault entry's path |
+
+`status`, `who`, `check`, and `doctor` return JSON (`structuredContent`). Write results for `add`, `seal`, and `rotate` are JSON and do not include file bodies. `lock` is not a tool.
 
 Pass **`repo_path`** (git root with `.vault/`), or set **`NIMVAULT_DEFAULT_REPO`**.
 

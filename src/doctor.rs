@@ -27,10 +27,11 @@ pub fn server_instructions() -> String {
          4. Call tool `nimvault_doctor` for a live checklist.\n\n\
          **Every tool call:** pass `repo_path` = git root that owns `.vault/` \
          (or set env `NIMVAULT_DEFAULT_REPO`). nimvault is CWD-sensitive.\n\n\
-         **Safety:** mutating tools (add/add_dir/remove/seal/unseal) are BLOCKED unless \
-         `NIMVAULT_MCP_ALLOW_MUTATE=1`. Tool results are shape and size only \
-         (path, id, rule, line, bytes, sync state). Never file contents, PEM, \
-         or token literals — there is no get tool. Prefer list/status/scan. \
+         **Safety:** mutating tools (add/add_dir/remove/seal/rotate/unseal) are BLOCKED unless \
+         `NIMVAULT_MCP_ALLOW_MUTATE=1`. `seal` requires `force` and `rotate` requires `rekey`. \
+         status, who, check, and doctor return JSON. Tool results are shape and size only \
+         (path, id, rule, line, bytes, sync state, recipient id). Never file contents, PEM, \
+         or token literals — there is no get tool and no lock tool. Prefer list/status/who/check. \
          Never commit plaintext secrets; only commit `.vault/*.gpg` after seal.\n\n\
          **Performance:** nimvault CLI >= 0.4.1 + one `seal` stores content hashes so status is fast.\n\n\
          **Clients:** Claude `claude mcp add nimvault -- nimvault-mcp`; \
@@ -69,7 +70,7 @@ pub fn format_doctor_report(cli_ok: bool, cli_detail: &str, gpg_hint: &str) -> S
             if mutate_enabled() {
                 "ENABLED (NIMVAULT_MCP_ALLOW_MUTATE)"
             } else {
-                "disabled (set NIMVAULT_MCP_ALLOW_MUTATE=1 to allow add/seal/unseal)"
+                "disabled (set NIMVAULT_MCP_ALLOW_MUTATE=1 to allow add/seal/rotate/unseal)"
             }
         ),
     ];
@@ -128,7 +129,7 @@ pub fn format_doctor_report(cli_ok: bool, cli_detail: &str, gpg_hint: &str) -> S
         if kpx_ok { "yes" } else { "no" }
     ));
     lines.push("Survey: docs/SURVEY.md — niche vs Vault/1Password/sops.".into());
-    lines.push("Next: nimvault_list / nimvault_status (repo_path optional if .vault walk-up or DEFAULT_REPO).".into());
+    lines.push("Next: nimvault_status / nimvault_who / nimvault_check (repo_path optional if .vault walk-up or DEFAULT_REPO).".into());
     lines.join("\n")
 }
 

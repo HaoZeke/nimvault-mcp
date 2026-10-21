@@ -6,13 +6,28 @@ use crate::doctor::install_help_block;
 pub fn blocked_mutate_message() -> String {
     if read_only_locked() {
         return "BLOCKED: NIMVAULT_MCP_READ_ONLY=1 — all mutating tools disabled (hard lock). \
-list/status/scan/doctor/resolve_repo only. Call nimvault_doctor."
+list/status/who/check/scan/doctor/resolve_repo only. Call nimvault_doctor."
             .into();
     }
-    "BLOCKED: set NIMVAULT_MCP_ALLOW_MUTATE=1 in MCP env to enable add/remove/mv/seal/unseal \
-(writes `.vault/`; never returns secret file bodies). list/status/scan remain available. \
+    "BLOCKED: set NIMVAULT_MCP_ALLOW_MUTATE=1 in MCP env to enable add/remove/mv/seal/rotate/unseal \
+(writes `.vault/`; never returns secret file bodies). list/status/who/check/scan remain available. \
 Call nimvault_doctor. See docs/SURVEY.md and docs/ARCHITECTURE.md."
         .into()
+}
+
+/// Write tools take a filesystem path, not file contents.
+pub fn require_path_arg(path: &str) -> Result<String, String> {
+    let p = path.trim();
+    if p.is_empty() {
+        return Err("an explicit path is required".into());
+    }
+    if p.contains(['\n', '\r', '\0']) {
+        return Err("path must be a single filesystem path".into());
+    }
+    if p.contains("-----BEGIN ") {
+        return Err("path must name a file".into());
+    }
+    Ok(p.to_string())
 }
 
 pub fn ensure_mutate() -> Result<(), String> {
@@ -175,6 +190,17 @@ mod tests {
         let v = agent_view(s);
         assert!(v.contains("[redacted"));
         assert!(!v.contains("sk-abcdefghijklmnopqrstuvwxyz012345"));
+    }
+
+    #[test]
+    fn path_arg_rejects_empty_multiline_and_key_body() {
+        assert!(require_path_arg("  ").is_err());
+        assert!(require_path_arg("a\nb").is_err());
+        assert!(require_path_arg("-----BEGIN OPENSSH PRIVATE KEY-----\nabc").is_err());
+        assert_eq!(
+            require_path_arg("  secrets/a.txt  ").unwrap(),
+            "secrets/a.txt"
+        );
     }
 
     #[test]

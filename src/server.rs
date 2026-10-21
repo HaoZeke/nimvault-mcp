@@ -4,18 +4,93 @@
 
 use rmcp::ServerHandler;
 use rmcp::{
-    handler::server::{tool::ToolRouter, wrapper::Parameters},
+    handler::server::{tool::ToolRouter, wrapper::Json, wrapper::Parameters},
     model::*,
     tool, tool_handler, tool_router,
 };
 
-use crate::cli::{run_nimvault_session, resolve_workdir};
-use crate::doctor::{format_doctor_report, server_instructions};
-use crate::policy::{agent_view, enrich_error as err_help, ensure_mutate, push_recipient, trunc};
+use crate::cli::{resolve_workdir, run_nimvault_session};
+use crate::doctor::server_instructions;
+use crate::policy::{
+    agent_view, enrich_error as err_help, ensure_mutate, push_recipient, require_path_arg, trunc,
+};
+use crate::report::{
+    assemble_doctor, parse_check, parse_status, parse_vault_doctor, parse_who, CheckReport,
+    DoctorReport, McpReadiness, StatusReport, VaultDoctor, WhoReport, WriteReport,
+};
 
 fn to_agent(s: impl AsRef<str>) -> String {
     agent_view(s.as_ref())
 }
+
+async fn mcp_readiness() -> McpReadiness {
+    let (cli_ok, cli) = crate::cli::cli_identity().await;
+    McpReadiness {
+        version: crate::constants::VERSION.into(),
+        mutate: crate::constants::mutate_enabled(),
+        read_only: crate::constants::read_only_locked(),
+        cli_ok,
+        cli,
+        lib_loaded: crate::inproc::lib_loaded(),
+        lib_version: crate::inproc::lib_version(),
+        default_repo: crate::constants::default_repo_env(),
+        hint: if cli_ok {
+            None
+        } else {
+            Some(crate::doctor::install_help_block())
+        },
+    }
+}
+
+fn repo_string(path: &std::path::Path) -> String {
+    path.display().to_string()
+}
+
+async fn run_write(
+    session: &crate::session::Session,
+    command: &str,
+    args: &[String],
+    repo_path: &Option<String>,
+    path: Option<String>,
+    force: Option<bool>,
+    rekey: Option<bool>,
+) -> Json<WriteReport> {
+    if let Err(m) = ensure_mutate() {
+        return Json(WriteReport::failure(command, "", path, force, rekey, &m));
+    }
+    let effective = session.prefer_repo_arg(repo_path);
+    let repo = match resolve_workdir(&effective) {
+        Ok(p) => repo_string(&p),
+        Err(e) => {
+            return Json(WriteReport::failure(command, "", path, force, rekey, &e));
+        }
+    };
+    match run_nimvault_session(session, args, repo_path).await {
+        Ok(o) if o.ok => Json(WriteReport::success(command, &repo, path, force, rekey)),
+        Ok(o) => Json(WriteReport::failure(
+            command,
+            &repo,
+            path,
+            force,
+            rekey,
+            &o.display(),
+        )),
+        Err(e) => Json(WriteReport::failure(command, &repo, path, force, rekey, &e)),
+    }
+}
+
+fn read_failed_status(err: &str) -> Json<StatusReport> {
+    Json(parse_status("", err, false))
+}
+
+fn read_failed_who(err: &str) -> Json<WhoReport> {
+    Json(parse_who("", err, false))
+}
+
+fn read_failed_check(err: &str) -> Json<CheckReport> {
+    Json(parse_check("", err, false))
+}
+
 use crate::tool_args::*;
 
 #[derive(Clone)]
@@ -37,7 +112,11 @@ impl Server {
     #[tool(
         name = "nimvault_version",
         description = "Return nimvault-mcp and nimvault CLI versions.",
-        annotations(title = "nimvault version", read_only_hint = true, idempotent_hint = true)
+        annotations(
+            title = "nimvault version",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
     )]
     async fn nimvault_version(&self, Parameters(_a): Parameters<EmptyArgs>) -> String {
         let mcp = crate::constants::version_output();
@@ -57,20 +136,45 @@ impl Server {
 
     #[tool(
         name = "nimvault_doctor",
-        description = "Diagnose nimvault CLI / MCP readiness and print install steps for missing pieces. Call this first when setup is unclear or tools return CLI-not-found errors.",
-        annotations(title = "nimvault doctor", read_only_hint = true, idempotent_hint = true)
+        description = "Vault doctor (nimvault doctor) plus MCP readiness. Returns JSON: backend, recipient, gpg, manifest, check, and problems. Does not return file contents.",
+        annotations(
+            title = "nimvault doctor",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
     )]
-    async fn nimvault_doctor(&self, Parameters(_a): Parameters<EmptyArgs>) -> String {
-        let (cli_ok, detail) = crate::cli::cli_identity().await;
-        let gpg = if cli_ok {
-            "GPG: ensure your agent can unlock the key in .vault/config (recipient). \
-status/seal/unseal need an unlocked agent on this host."
-        } else {
-            ""
-        };
-        to_agent(format_doctor_report(cli_ok, &detail, gpg))
+    async fn nimvault_doctor(&self, Parameters(a): Parameters<RepoArgs>) -> Json<DoctorReport> {
+        let mcp = mcp_readiness().await;
+        let effective = self.session.prefer_repo_arg(&a.repo_path);
+        let asked = effective.is_some();
+        match resolve_workdir(&effective) {
+            Ok(dir) => {
+                self.session.remember_root(dir.clone());
+                let repo = Some(repo_string(&dir));
+                match run_nimvault_session(&self.session, &["doctor".into()], &repo).await {
+                    Ok(o) => Json(assemble_doctor(
+                        mcp,
+                        true,
+                        parse_vault_doctor(&o.stdout, &o.stderr, o.ok),
+                    )),
+                    Err(e) => {
+                        let mut vault = VaultDoctor::default();
+                        vault.ok = false;
+                        vault.problems.push(e);
+                        Json(assemble_doctor(mcp, true, vault))
+                    }
+                }
+            }
+            Err(e) => {
+                let mut report = assemble_doctor(mcp, false, VaultDoctor::default());
+                if asked {
+                    report.ok = false;
+                    report.problems.push(e);
+                }
+                Json(report)
+            }
+        }
     }
-
 
     #[tool(
         name = "nimvault_list",
@@ -87,14 +191,45 @@ status/seal/unseal need an unlocked agent on this host."
 
     #[tool(
         name = "nimvault_status",
-        description = "Show sync status of vault entries vs plaintext on disk ([in-sync]/[modified]/[missing]).",
-        annotations(title = "nimvault status", read_only_hint = true, idempotent_hint = true)
+        description = "Sync status of vault entries vs plaintext on disk. Returns JSON entries with state in-sync, modified, missing, no-blob, or error. Does not return file contents.",
+        annotations(
+            title = "nimvault status",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
     )]
-    async fn nimvault_status(&self, Parameters(a): Parameters<RepoArgs>) -> String {
+    async fn nimvault_status(&self, Parameters(a): Parameters<RepoArgs>) -> Json<StatusReport> {
         match run_nimvault_session(&self.session, &["status".into()], &a.repo_path).await {
-            Ok(o) if o.ok => to_agent(trunc(&o.display(), 48_000)),
-            Ok(o) => to_agent(format!("FAILED (GPG/agent?)\n{}", trunc(&o.display(), 8_000))),
-            Err(e) => err_help(e.as_str()),
+            Ok(o) => Json(parse_status(&o.stdout, &o.stderr, o.ok)),
+            Err(e) => read_failed_status(&err_help(&e)),
+        }
+    }
+
+    #[tool(
+        name = "nimvault_who",
+        description = "Recipients that can open each vault entry (nimvault who). Returns JSON path and recipient ids. Does not return file contents.",
+        annotations(title = "nimvault who", read_only_hint = true, idempotent_hint = true)
+    )]
+    async fn nimvault_who(&self, Parameters(a): Parameters<RepoArgs>) -> Json<WhoReport> {
+        match run_nimvault_session(&self.session, &["who".into()], &a.repo_path).await {
+            Ok(o) => Json(parse_who(&o.stdout, &o.stderr, o.ok)),
+            Err(e) => read_failed_who(&err_help(&e)),
+        }
+    }
+
+    #[tool(
+        name = "nimvault_check",
+        description = "Blob-vs-manifest consistency (nimvault check). Decrypts nothing. Returns JSON; ok is false when any entry is inconsistent. Does not return file contents.",
+        annotations(
+            title = "nimvault check",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
+    )]
+    async fn nimvault_check(&self, Parameters(a): Parameters<RepoArgs>) -> Json<CheckReport> {
+        match run_nimvault_session(&self.session, &["check".into()], &a.repo_path).await {
+            Ok(o) => Json(parse_check(&o.stdout, &o.stderr, o.ok)),
+            Err(e) => read_failed_check(&err_help(&e)),
         }
     }
 
@@ -139,35 +274,55 @@ status/seal/unseal need an unlocked agent on this host."
 
     #[tool(
         name = "nimvault_add",
-        description = "Add a file to the vault (`nimvault add`). Requires NIMVAULT_MCP_ALLOW_MUTATE=1.",
-        annotations(title = "nimvault add", read_only_hint = false, destructive_hint = false)
+        description = "Add a file to the vault (nimvault add). path is the filesystem path, not file contents. Requires NIMVAULT_MCP_ALLOW_MUTATE=1. Result is JSON and never includes plaintext.",
+        annotations(
+            title = "nimvault add",
+            read_only_hint = false,
+            destructive_hint = false
+        )
     )]
-    async fn nimvault_add(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
-        if let Err(m) = ensure_mutate() {
-            return to_agent(m);
-        }
-        let mut args = vec!["add".into(), a.path.clone()];
+    async fn nimvault_add(&self, Parameters(a): Parameters<PathRepoArgs>) -> Json<WriteReport> {
+        let path = match require_path_arg(&a.path) {
+            Ok(p) => p,
+            Err(e) => {
+                return Json(WriteReport::failure("add", "", None, None, None, &e));
+            }
+        };
+        let mut args = vec!["add".into(), path.clone()];
         push_recipient(&mut args, &a.recipient);
         if a.no_gitignore.unwrap_or(false) {
             args.push("--no-gitignore".into());
         }
-        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => to_agent(o.display()),
-            Ok(o) => to_agent(format!("FAILED\n{}", o.display())),
-            Err(e) => err_help(e.as_str()),
-        }
+        run_write(
+            &self.session,
+            "add",
+            &args,
+            &a.repo_path,
+            Some(path),
+            None,
+            None,
+        )
+        .await
     }
 
     #[tool(
         name = "nimvault_add_dir",
         description = "Add a directory recursively (`nimvault add-dir`). Requires NIMVAULT_MCP_ALLOW_MUTATE=1.",
-        annotations(title = "nimvault add-dir", read_only_hint = false, destructive_hint = false)
+        annotations(
+            title = "nimvault add-dir",
+            read_only_hint = false,
+            destructive_hint = false
+        )
     )]
     async fn nimvault_add_dir(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
         if let Err(m) = ensure_mutate() {
             return to_agent(m);
         }
-        let mut args = vec!["add-dir".into(), a.path.clone()];
+        let path = match require_path_arg(&a.path) {
+            Ok(p) => p,
+            Err(e) => return err_help(&e),
+        };
+        let mut args = vec!["add-dir".into(), path];
         push_recipient(&mut args, &a.recipient);
         if a.no_gitignore.unwrap_or(false) {
             args.push("--no-gitignore".into());
@@ -182,7 +337,11 @@ status/seal/unseal need an unlocked agent on this host."
     #[tool(
         name = "nimvault_remove",
         description = "Remove a path from the vault manifest/blobs (does not delete plaintext). Requires NIMVAULT_MCP_ALLOW_MUTATE=1.",
-        annotations(title = "nimvault remove", read_only_hint = false, destructive_hint = true)
+        annotations(
+            title = "nimvault remove",
+            read_only_hint = false,
+            destructive_hint = true
+        )
     )]
     async fn nimvault_remove(&self, Parameters(a): Parameters<PathRepoArgs>) -> String {
         if let Err(m) = ensure_mutate() {
@@ -199,26 +358,66 @@ status/seal/unseal need an unlocked agent on this host."
 
     #[tool(
         name = "nimvault_seal",
-        description = "Re-encrypt all vault entries from plaintext sources (`nimvault seal`). Requires NIMVAULT_MCP_ALLOW_MUTATE=1.",
-        annotations(title = "nimvault seal", read_only_hint = false, destructive_hint = true)
+        description = "Re-encrypt vault entries (nimvault seal). force is required: false seals changed plaintext only, true re-encrypts every entry. Requires NIMVAULT_MCP_ALLOW_MUTATE=1. Result is JSON and never includes plaintext.",
+        annotations(
+            title = "nimvault seal",
+            read_only_hint = false,
+            destructive_hint = true
+        )
     )]
-    async fn nimvault_seal(&self, Parameters(a): Parameters<SealArgs>) -> String {
-        if let Err(m) = ensure_mutate() {
-            return to_agent(m);
-        }
+    async fn nimvault_seal(&self, Parameters(a): Parameters<SealArgs>) -> Json<WriteReport> {
         let mut args = vec!["seal".into()];
-        push_recipient(&mut args, &a.recipient);
-        match run_nimvault_session(&self.session, &args, &a.repo_path).await {
-            Ok(o) if o.ok => to_agent(trunc(&o.display(), 32_000)),
-            Ok(o) => to_agent(format!("FAILED\n{}", trunc(&o.display(), 8_000))),
-            Err(e) => err_help(e.as_str()),
+        if a.force {
+            args.push("--force".into());
         }
+        push_recipient(&mut args, &a.recipient);
+        run_write(
+            &self.session,
+            "seal",
+            &args,
+            &a.repo_path,
+            None,
+            Some(a.force),
+            None,
+        )
+        .await
+    }
+
+    #[tool(
+        name = "nimvault_rotate",
+        description = "Rewrap data keys, or re-encrypt payloads (nimvault rotate). rekey is required: false rewraps keys only, true re-encrypts every payload under a fresh data key. Requires NIMVAULT_MCP_ALLOW_MUTATE=1. Result is JSON and never includes plaintext.",
+        annotations(
+            title = "nimvault rotate",
+            read_only_hint = false,
+            destructive_hint = true
+        )
+    )]
+    async fn nimvault_rotate(&self, Parameters(a): Parameters<RotateArgs>) -> Json<WriteReport> {
+        let mut args = vec!["rotate".into()];
+        if a.rekey {
+            args.push("--rekey".into());
+        }
+        push_recipient(&mut args, &a.recipient);
+        run_write(
+            &self.session,
+            "rotate",
+            &args,
+            &a.repo_path,
+            None,
+            None,
+            Some(a.rekey),
+        )
+        .await
     }
 
     #[tool(
         name = "nimvault_unseal",
         description = "Decrypt all vault entries to target paths (`nimvault unseal`). Requires NIMVAULT_MCP_ALLOW_MUTATE=1. Needs GPG agent unlock.",
-        annotations(title = "nimvault unseal", read_only_hint = false, destructive_hint = true)
+        annotations(
+            title = "nimvault unseal",
+            read_only_hint = false,
+            destructive_hint = true
+        )
     )]
     async fn nimvault_unseal(&self, Parameters(a): Parameters<UnsealArgs>) -> String {
         if let Err(m) = ensure_mutate() {
@@ -239,7 +438,11 @@ status/seal/unseal need an unlocked agent on this host."
     #[tool(
         name = "nimvault_mv",
         description = "Rename a vault entry target path (`nimvault mv old new`). Requires mutate permission. Does not print file contents.",
-        annotations(title = "nimvault mv", read_only_hint = false, destructive_hint = false)
+        annotations(
+            title = "nimvault mv",
+            read_only_hint = false,
+            destructive_hint = false
+        )
     )]
     async fn nimvault_mv(&self, Parameters(a): Parameters<MoveArgs>) -> String {
         if let Err(m) = ensure_mutate() {
@@ -257,7 +460,11 @@ status/seal/unseal need an unlocked agent on this host."
     #[tool(
         name = "nimvault_resolve_repo",
         description = "Resolve which directory would be used as repo_path (explicit arg, NIMVAULT_DEFAULT_REPO, or walk-up to .vault). Read-only.",
-        annotations(title = "resolve vault repo", read_only_hint = true, idempotent_hint = true)
+        annotations(
+            title = "resolve vault repo",
+            read_only_hint = true,
+            idempotent_hint = true
+        )
     )]
     async fn nimvault_resolve_repo(&self, Parameters(a): Parameters<RepoArgs>) -> String {
         let effective = self.session.prefer_repo_arg(&a.repo_path);
@@ -274,7 +481,6 @@ status/seal/unseal need an unlocked agent on this host."
             Err(e) => err_help(e.as_str()),
         }
     }
-
 }
 
 #[tool_handler]

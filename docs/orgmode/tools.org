@@ -1,0 +1,34 @@
+#+TITLE: MCP tools
+
+Read-only tools return JSON in ~structuredContent~.
+
+* status
+One entry per path. ~state~ is ~in-sync~, ~modified~, ~missing~, ~no-blob~, or ~error~.
+
+* who
+One path and the wrap-rule recipients that can open it.
+
+* check
+Blob bytes against the manifest hash. Decrypts nothing. ~ok~ is false when an entry is inconsistent.
+
+* doctor
+Backend, recipient, gpg, manifest, and check, plus MCP readiness (CLI path, mutate gate).
+
+Write tools take explicit arguments. Results name the repo. They do not include file bodies.
+
+* add
+Requires ~path~ (a filesystem path).
+
+* seal
+Requires ~force~. False seals changed plaintext only. True re-encrypts every entry through the CLI. ~nv_seal~ has no force flag.
+
+* rotate
+Requires ~rekey~. False rewraps data keys. True re-encrypts every payload.
+
+~unseal~ is a tool. ~lock~ is not.
+
+* vault directory
+The server sets ~NIMVAULT_VAULT_REPO~ to the directory it resolved: ~repo_path~, then ~NIMVAULT_DEFAULT_REPO~, then a parent that contains ~.vault/~. The CLI otherwise uses the git toplevel.
+
+* setup
+~nimvault-mcp setup~ writes Claude config (.claude.json) and Codex config (.codex/config.toml) under the home directory when the nimvault entry is absent. A second run does not change those files. ~setup --add-mcp~ invokes add-mcp only when a selected entry is absent, then restores any entry that was already present.

@@ -1,0 +1,1 @@
+A CLI spawn sets NIMVAULT_VAULT_REPO to the vault directory already resolved, including when that directory is not the git toplevel.

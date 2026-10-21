@@ -11,6 +11,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install nimvault CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpcre3
+          curl -fsSL -o /tmp/nim.tar.xz https://nim-lang.org/download/nim-2.2.4-linux_x64.tar.xz
+          mkdir -p /opt/nim
+          tar -C /opt/nim -xJf /tmp/nim.tar.xz
+          echo "/opt/nim/nim-2.2.4/bin" >> "$GITHUB_PATH"
+          git clone --depth 1 https://github.com/HaoZeke/nimvault.git /tmp/nimvault
+          export PATH="/opt/nim/nim-2.2.4/bin:$PATH"
+          (cd /tmp/nimvault && nimble build -y -d:release)
+          mkdir -p "$HOME/.local/bin"
+          install -m 755 /tmp/nimvault/bin/nimvault "$HOME/.local/bin/nimvault"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: cargo test
       - run: cargo build --release
       - name: CLI surface smoke

@@ -1,4 +1,11 @@
 # Changelog
+## Unreleased
+
+- status, who, check, and doctor return JSON
+- rotate takes an explicit rekey flag; add, seal, and rotate results omit file bodies
+- setup leaves an existing client entry in place
+- CLI spawns set NIMVAULT_VAULT_REPO to the resolved vault directory
+
 ## 0.3.7
 
 - Tool results are shape and size only (agent_view on every egress)

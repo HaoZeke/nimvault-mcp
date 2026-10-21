@@ -1,0 +1,1 @@
+status, who, check, and doctor return JSON. File bodies stay out of the result.

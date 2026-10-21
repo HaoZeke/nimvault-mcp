@@ -1,7 +1,7 @@
 {
   "name": "nimvault",
   "version": "0.3.7",
-  "description": "GPG opaque-blob vault (nimvault): list/status/scan secrets; gated add/seal/unseal. Local CLI — no cloud. Pass repo_path to the git root that owns .vault/.",
+  "description": "GPG opaque-blob vault (nimvault): status/who/check/doctor return JSON; gated add/seal/rotate/unseal. Local CLI — no cloud. Pass repo_path to the git root that owns .vault/.",
   "author": {
     "name": "Rohit Goswami",
     "email": "r95g10@gmail.com",

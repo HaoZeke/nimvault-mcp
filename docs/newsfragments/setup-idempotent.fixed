@@ -1,0 +1,1 @@
+setup writes a Claude or Codex nimvault entry only when that entry is absent, and add-mcp cannot replace an entry that is already there.

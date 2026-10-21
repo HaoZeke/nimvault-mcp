@@ -7,6 +7,7 @@ mod cli;
 mod constants;
 mod doctor;
 mod policy;
+mod report;
 #[cfg(unix)]
 mod serve;
 mod server;

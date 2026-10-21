@@ -94,7 +94,9 @@ Build: `cd nimvault && nimble buildLib && cp lib/libnimvault.so ~/.local/lib/`
 (or set `NIMVAULT_LIB` to the `.so`).
 
 Full C ABI: `nv_list`, `nv_status`, `nv_seal`, `nv_unseal`, `nv_add`, `nv_add_dir`,
-`nv_remove`, `nv_mv`, `nv_scan` plus `nv_free` / `nv_last_error` / `nv_version`.
+`nv_remove`, `nv_mv`, `nv_scan`, and when the library exports them `nv_who`,
+`nv_check`, `nv_rotate`, `nv_doctor`, plus `nv_free` / `nv_last_error` /
+`nv_version`. `seal --force` always uses the CLI: `nv_seal` has no force flag.
 
 **MCP routing (`run_nimvault_session`):** for **every** op, call `inproc::try_inproc`
 first; if it returns `Some`, that result is used (success or library error text).

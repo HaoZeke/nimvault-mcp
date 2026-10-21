@@ -8,21 +8,21 @@ description: >
 
 # nimvault (via MCP)
 
-Prefer **MCP tools** (`nimvault_list`, `nimvault_status`, `nimvault_scan`, …) over shelling `nimvault` directly when the nimvault MCP server is connected.
+Prefer **MCP tools** (`nimvault_status`, `nimvault_who`, `nimvault_check`, `nimvault_doctor`, `nimvault_scan`, …) over shelling `nimvault` directly when the nimvault MCP server is connected.
 
 ## Critical rules
 
 Call **nimvault_doctor** first if the user just installed the plugin or tools error with CLI-not-found.
 
 1. **Always set `repo_path`** to the **git repository root** that contains `.vault/` (nimvault is CWD-sensitive). Examples: `~/.local/share/chezmoi`, a project checkout with `.vault/config`.
-2. **Mutating tools are blocked** unless the user set `NIMVAULT_MCP_ALLOW_MUTATE=1` in MCP env (add, add_dir, remove, seal, unseal).
+2. **Mutating tools are blocked** unless the user set `NIMVAULT_MCP_ALLOW_MUTATE=1` in MCP env (add, add_dir, remove, seal, rotate, unseal). `seal` needs `force`. `rotate` needs `rekey`.
 3. **Never commit plaintext secrets.** After `nimvault_add`, run `nimvault_seal` and `git add .vault/` only.
 4. For fast status, need **nimvault CLI ≥ 0.4.1** and one successful `seal` (manifest v4 `contentHash`).
 
 ## Typical flows
 
 **Check health**
-- `nimvault_version` then `nimvault_status` with `repo_path`
+- `nimvault_doctor`, `nimvault_status`, `nimvault_who`, and `nimvault_check` with `repo_path`. Read the JSON (`ok`, `entries`, `problems`). They do not contain file bodies.
 
 **Add a secret file**
 - Confirm mutate env is enabled (or tell the user to set it)
@@ -47,7 +47,7 @@ CLI docs: https://nimvault.rgoswami.me
 ## Security (survey-aligned)
 
 - **Shape and size only.** MCP results may name a path, an id, a rule, a line number, a byte size, and a sync state. They never include file bodies, PEM, tokens, or DEKs. Do not run `nimvault get` in the shell for the model.
-- Prefer **status/list/scan/doctor/resolve_repo**. There is no get tool.
+- Prefer **status/who/check/list/scan/doctor/resolve_repo**. There is no get tool and no lock tool.
 - Mutate only with explicit user intent + `NIMVAULT_MCP_ALLOW_MUTATE=1`; use `NIMVAULT_MCP_READ_ONLY=1` on shared agents.
 - Optional `NIMVAULT_MCP_AUDIT_LOG` records tool name + paths only.
 - See `docs/SURVEY.md` for how this differs from Vault / 1Password / sops MCP patterns.

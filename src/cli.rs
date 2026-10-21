@@ -93,11 +93,9 @@ pub fn resolve_workdir(repo_path: &Option<String>) -> Result<PathBuf, String> {
         }
     }
 
-    Err(
-        "No repo_path and no .vault found walking up from CWD. \
+    Err("No repo_path and no .vault found walking up from CWD. \
          Pass repo_path=…/git/root or set NIMVAULT_DEFAULT_REPO, or cd into a vaulted repo."
-            .into(),
-    )
+        .into())
 }
 
 pub fn audit(tool: &str, workdir: &Path, extra: &str) {
@@ -126,12 +124,16 @@ fn chrono_lite_now() -> String {
     format!("{secs}")
 }
 
+fn canonical_dir(dir: &Path) -> PathBuf {
+    dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf())
+}
+
 #[allow(dead_code)] // public helper for callers that skip sticky session
 pub async fn run_nimvault(
     args: &[String],
     repo_path: &Option<String>,
 ) -> Result<NimvaultOutput, String> {
-    let workdir = resolve_workdir(repo_path)?;
+    let workdir = canonical_dir(&resolve_workdir(repo_path)?);
     let tool = args.first().map(|s| s.as_str()).unwrap_or("?");
     audit(tool, &workdir, &args.join(" "));
     run_nimvault_in(args, &workdir).await
@@ -144,7 +146,7 @@ pub async fn run_nimvault_session(
     repo_path: &Option<String>,
 ) -> Result<NimvaultOutput, String> {
     let effective = session.prefer_repo_arg(repo_path);
-    let workdir = resolve_workdir(&effective)?;
+    let workdir = canonical_dir(&resolve_workdir(&effective)?);
     session.remember_root(workdir.clone());
     let tool = args.first().map(|s| s.as_str()).unwrap_or("?");
     audit(tool, &workdir, &args.join(" "));
@@ -212,13 +214,24 @@ pub async fn cli_identity() -> (bool, String) {
 
 pub async fn run_nimvault_in(args: &[String], dir: &Path) -> Result<NimvaultOutput, String> {
     let bin = resolve_bin()?;
+    // nimvault resolves the vault from --vault, then NIMVAULT_VAULT_REPO,
+    // then `git rev-parse`. A directory that holds `.vault/` but is not the
+    // git toplevel would otherwise be ignored. Pin the directory already resolved.
+    let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
     let mut cmd = Command::new(&bin);
     cmd.args(args);
-    cmd.current_dir(dir);
+    cmd.current_dir(&dir);
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     cmd.env("GIT_TERMINAL_PROMPT", "0");
+    let op = args.first().map(String::as_str).unwrap_or("");
+    if !matches!(
+        op,
+        "--help" | "-h" | "--version" | "-V" | "version" | "help"
+    ) {
+        cmd.env("NIMVAULT_VAULT_REPO", &dir);
+    }
 
     let child = cmd
         .spawn()
@@ -258,7 +271,9 @@ mod tests {
             }
             return;
         }
-        let o = run_nimvault_in(&["--help".into()], Path::new(".")).await.expect("run");
+        let o = run_nimvault_in(&["--help".into()], Path::new("."))
+            .await
+            .expect("run");
         if let Some(v) = prev_bin {
             std::env::set_var("NIMVAULT_BIN", v);
         } else {
@@ -326,10 +341,7 @@ mod tests {
             "try_inproc(seal) must be Some when full ABI lib is loaded (got None => CLI fallback)"
         );
 
-        let scratch = std::env::temp_dir().join(format!(
-            "nv_mcp_inproc_ev_{}",
-            std::process::id()
-        ));
+        let scratch = std::env::temp_dir().join(format!("nv_mcp_inproc_ev_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&scratch);
         std::fs::create_dir_all(scratch.join(".vault")).unwrap();
         std::fs::write(
@@ -341,11 +353,7 @@ mod tests {
         std::fs::write(&secret, "mcp-inproc-evidence\n").unwrap();
 
         let trap = scratch.join("trap_nimvault.sh");
-        std::fs::write(
-            &trap,
-            "#!/bin/sh\necho TRAP_CLI_SPAWNED >&2\nexit 99\n",
-        )
-        .unwrap();
+        std::fs::write(&trap, "#!/bin/sh\necho TRAP_CLI_SPAWNED >&2\nexit 99\n").unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -360,13 +368,9 @@ mod tests {
         let repo = Some(scratch.to_string_lossy().into_owned());
 
         // Unknown op falls through to CLI trap — proves trap would fire if used.
-        let miss = run_nimvault_session(
-            &session,
-            &["__not_a_real_op__".into()],
-            &repo,
-        )
-        .await
-        .expect("session returns even on trap");
+        let miss = run_nimvault_session(&session, &["__not_a_real_op__".into()], &repo)
+            .await
+            .expect("session returns even on trap");
         assert!(
             !miss.ok && miss.stderr.contains("TRAP_CLI_SPAWNED"),
             "trap must run for unknown op; got ok={} stderr={}",
@@ -403,6 +407,43 @@ mod tests {
             );
         }
 
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// The CLI must see the resolved directory even when it is not the git toplevel.
+    #[tokio::test]
+    async fn spawn_pins_vault_repo_env() {
+        let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let prev_bin = std::env::var_os("NIMVAULT_BIN");
+        let scratch = std::env::temp_dir().join(format!("nv_mcp_vault_env_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(scratch.join(".vault")).unwrap();
+        let script = scratch.join("nv.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nprintf '%s\\n' \"$NIMVAULT_VAULT_REPO\"\n",
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&script).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&script, perms).unwrap();
+        }
+        std::env::set_var("NIMVAULT_BIN", &script);
+        let o = run_nimvault_in(&["status".into()], &scratch)
+            .await
+            .expect("stub");
+        if let Some(v) = prev_bin {
+            std::env::set_var("NIMVAULT_BIN", v);
+        } else {
+            std::env::remove_var("NIMVAULT_BIN");
+        }
+        let got = o.stdout.trim();
+        let expect = scratch.canonicalize().unwrap();
+        assert_eq!(Path::new(got), expect, "stdout={}", o.stdout);
+        assert!(o.ok, "stderr={}", o.stderr);
         let _ = std::fs::remove_dir_all(&scratch);
     }
 }

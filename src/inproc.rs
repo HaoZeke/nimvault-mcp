@@ -12,9 +12,12 @@ type NvLastErrorFn = unsafe extern "C" fn() -> *const c_char;
 type NvVersionFn = unsafe extern "C" fn() -> *const c_char;
 type NvRR = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_char;
 type NvUnseal = unsafe extern "C" fn(*const c_char, *const c_char, c_int) -> *mut c_char;
-type NvAdd = unsafe extern "C" fn(*const c_char, *const c_char, *const c_char, c_int) -> *mut c_char;
-type NvMv = unsafe extern "C" fn(*const c_char, *const c_char, *const c_char, *const c_char) -> *mut c_char;
+type NvAdd =
+    unsafe extern "C" fn(*const c_char, *const c_char, *const c_char, c_int) -> *mut c_char;
+type NvMv =
+    unsafe extern "C" fn(*const c_char, *const c_char, *const c_char, *const c_char) -> *mut c_char;
 type NvScan = unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char;
+type NvRotate = unsafe extern "C" fn(*const c_char, *const c_char, c_int) -> *mut c_char;
 
 struct LibApi {
     _lib: Library,
@@ -27,9 +30,14 @@ struct LibApi {
     unseal: Option<NvUnseal>,
     add: Option<NvAdd>,
     add_dir: Option<NvAdd>,
-    remove3: Option<unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char>,
+    remove3:
+        Option<unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char>,
     mv: Option<NvMv>,
     scan: Option<NvScan>,
+    who: Option<NvRR>,
+    check: Option<NvRR>,
+    doctor: Option<NvRR>,
+    rotate: Option<NvRotate>,
 }
 
 static API: OnceLock<Option<&'static LibApi>> = OnceLock::new();
@@ -65,23 +73,35 @@ fn load() -> Option<&'static LibApi> {
                 Err(_) => continue,
             };
             unsafe {
-                let Ok(free) = lib.get::<NvFreeFn>(b"nv_free\0") else { continue };
-                let Ok(last_error) = lib.get::<NvLastErrorFn>(b"nv_last_error\0") else { continue };
-                let Ok(version) = lib.get::<NvVersionFn>(b"nv_version\0") else { continue };
+                let Ok(free) = lib.get::<NvFreeFn>(b"nv_free\0") else {
+                    continue;
+                };
+                let Ok(last_error) = lib.get::<NvLastErrorFn>(b"nv_last_error\0") else {
+                    continue;
+                };
+                let Ok(version) = lib.get::<NvVersionFn>(b"nv_version\0") else {
+                    continue;
+                };
                 let list = lib.get::<NvRR>(b"nv_list\0").ok().map(|s| *s);
                 let status = lib.get::<NvRR>(b"nv_status\0").ok().map(|s| *s);
                 let seal = lib.get::<NvRR>(b"nv_seal\0").ok().map(|s| *s);
                 let unseal = lib.get::<NvUnseal>(b"nv_unseal\0").ok().map(|s| *s);
                 let add = lib.get::<NvAdd>(b"nv_add\0").ok().map(|s| *s);
                 let add_dir = lib.get::<NvAdd>(b"nv_add_dir\0").ok().map(|s| *s);
-                let remove3 = lib
-                    .get::<unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_char>(
-                        b"nv_remove\0",
-                    )
-                    .ok()
-                    .map(|s| *s);
+                let remove3 =
+                    lib.get::<unsafe extern "C" fn(
+                        *const c_char,
+                        *const c_char,
+                        *const c_char,
+                    ) -> *mut c_char>(b"nv_remove\0")
+                        .ok()
+                        .map(|s| *s);
                 let mv = lib.get::<NvMv>(b"nv_mv\0").ok().map(|s| *s);
                 let scan = lib.get::<NvScan>(b"nv_scan\0").ok().map(|s| *s);
+                let who = lib.get::<NvRR>(b"nv_who\0").ok().map(|s| *s);
+                let check = lib.get::<NvRR>(b"nv_check\0").ok().map(|s| *s);
+                let doctor = lib.get::<NvRR>(b"nv_doctor\0").ok().map(|s| *s);
+                let rotate = lib.get::<NvRotate>(b"nv_rotate\0").ok().map(|s| *s);
                 let api = LibApi {
                     free: *free,
                     last_error: *last_error,
@@ -95,6 +115,10 @@ fn load() -> Option<&'static LibApi> {
                     remove3,
                     mv,
                     scan,
+                    who,
+                    check,
+                    doctor,
+                    rotate,
                     _lib: lib,
                 };
                 return Some(Box::leak(Box::new(api)));
@@ -160,6 +184,10 @@ pub fn try_inproc(args: &[String], workdir: &Path) -> Option<(bool, String, Stri
                 f(repo.as_ptr(), rec.as_ptr())
             }
             "seal" => {
+                // nv_seal has no force argument. A full reseal goes to the CLI.
+                if args.iter().any(|a| a == "--force") {
+                    return None;
+                }
                 let f = api.seal?;
                 f(repo.as_ptr(), rec.as_ptr())
             }
@@ -214,6 +242,27 @@ pub fn try_inproc(args: &[String], workdir: &Path) -> Option<(bool, String, Stri
                 let p = CString::new(path).ok()?;
                 f(repo.as_ptr(), p.as_ptr(), rec.as_ptr())
             }
+            "who" => {
+                let f = api.who?;
+                f(repo.as_ptr(), rec.as_ptr())
+            }
+            "check" => {
+                let f = api.check?;
+                f(repo.as_ptr(), rec.as_ptr())
+            }
+            "doctor" => {
+                let f = api.doctor?;
+                f(repo.as_ptr(), rec.as_ptr())
+            }
+            "rotate" => {
+                let f = api.rotate?;
+                let rekey: c_int = if args.iter().any(|a| a == "--rekey") {
+                    1
+                } else {
+                    0
+                };
+                f(repo.as_ptr(), rec.as_ptr(), rekey)
+            }
             _ => return None,
         }
     };
@@ -234,8 +283,12 @@ mod tests {
 
     #[test]
     fn try_inproc_bad_repo_errors_without_panic() {
-        let lib = std::env::var("NIMVAULT_LIB").ok().filter(|p| Path::new(p).is_file());
-        if lib.is_none() && !Path::new("/home/rgoswami/Git/Github/Tools/nimvault/lib/libnimvault.so").is_file() {
+        let lib = std::env::var("NIMVAULT_LIB")
+            .ok()
+            .filter(|p| Path::new(p).is_file());
+        if lib.is_none()
+            && !Path::new("/home/rgoswami/Git/Github/Tools/nimvault/lib/libnimvault.so").is_file()
+        {
             return; // skip if no .so in CI without buildLib
         }
         if lib.is_none() {

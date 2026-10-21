@@ -1,0 +1,1 @@
+rotate takes an explicit rekey flag. add, seal, and rotate results name the repo and omit plaintext.

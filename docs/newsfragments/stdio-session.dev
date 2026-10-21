@@ -1,0 +1,1 @@
+Stdio tests drive the server against a temporary vault and a throwaway GPG key.
